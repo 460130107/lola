@@ -58,9 +58,9 @@ def sumWord(i, sEnglish,  tfe):
 		total += tfe[j, i]
 	return total
 		
-#french = rd.open_file('training\hansards.36.2.f')
-#english = rd.open_file('training\hansards.36.2.e')
+#french = 'training\hansards.36.2.f'
+#english = 'training\hansards.36.2.e'
 french = 'training\example.f'
 english = 'training\example.e'
 
-print ibm1(french, english, 0.5, 10000)
+print ibm1(french, english, 0.5, 5)
