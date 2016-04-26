@@ -1,67 +1,118 @@
 import numpy as np
 import read_data as rd
 
-def ibm1(french, english, initVal, iterations):
-	french = rd.open_file(french)
-	english = rd.open_file(english)
-	corpusFrench, dictFrench = rd.wordToInt(french)
-	corpusEnglish, dictEnglish = rd.wordToInt(english)
-	tfe = initUniform(initVal, dictFrench, dictEnglish)
-	for i in range(0, iterations):
-		cfe, ce = eStep(corpusFrench, corpusEnglish, tfe, dictFrench, dictEnglish)
-		tfe = mStep(cfe, ce)
-	return tfe
 
-# expectation step, calculating counts
-def eStep(french, english, tfe, dictFrench, dictEnglish):
-	lengthC= len(french)
-	cfe = setcfeTo0(dictFrench, dictEnglish)
-	ce = setceTo0(dictEnglish)
-	for k in range(0, lengthC):
-		sEnglish = english[k]
-		sFrench = french[k]
-		for i in sFrench:
-			for j in sEnglish:
-				tfeTotal = sumWord(i, sEnglish, tfe)
-				delta = tfe[j,i]/tfeTotal
-				cfe[j,i] += delta
-				ce[j,0] += delta
-	return cfe, ce
+def ibm1(french, english, init_val, iterations):
+    '''
 
-# Normalizing counts
-def mStep(cfe, ce):
-	return cfe/ce
+    :param french:
+    :param english:
+    :param init_val:
+    :param iterations:
+    :return:
+    '''
+    french = rd.open_file(french)
+    english = rd.open_file(english)
+    corpus_french, dict_french = rd.word2int(french)
+    corpus_english, dict_english = rd.word2int(english)
+    lex_param = set_lex_param(init_val, dict_french, dict_english)
+    for i in range(0, iterations):
+        lex_counts, lex_normalize = e_step(corpus_french, corpus_english, lex_param, dict_french, dict_english)
+        lex_param = m_step(lex_counts, lex_normalize)
+    return lex_param
 
-# Initialize and return a t(f|e) parameter with uniform initializations		
-def initUniform(initVal, dictFrench, dictEnglish):
-	lengthFrench = len(dictFrench)
-	lengthEnglish = len(dictEnglish)
-	print lengthFrench, lengthEnglish
-	initMatrix = np.empty([lengthEnglish, lengthFrench])
-	initMatrix.fill(initVal)
-	return initMatrix
 
-# Initialize and return a count matrix with 0's
-def setcfeTo0(dictFrench, dictEnglish):
-	lengthFrench = len(dictFrench)
-	lengthEnglish = len(dictEnglish)
-	countMatrix = np.zeros((lengthFrench, lengthEnglish))
-	return countMatrix
-	
-def setceTo0(dict):
-	length = len(dict)
-	countMatrix = np.zeros((length, 1))
-	return countMatrix
+def e_step(french, english, lex_param, dict_french, dict_english):
+    '''
+    :param french:
+    :param english:
+    :param lex_param:
+    :param dict_french:
+    :param dict_english:
+    :return:
+    '''
+    length_corpus = len(french)
+    lex_counts = set_lex_counts(dict_french, dict_english)
+    lex_normalize = set_normalize(dict_english)
+    for sentence_index in range(0, length_corpus):
+        english_sentence = english[sentence_index]
+        french_sentence = french[sentence_index]
+        for french_word in french_sentence:
+            for english_word in english_sentence:
+                tfe_total = sum_word(french_word, english_sentence, lex_param)
+                delta = lex_param[english_word, french_word]/tfe_total
+                lex_counts[english_word, french_word] += delta
+                lex_normalize[english_word, 0] += delta
+    return lex_counts, lex_normalize
 
-def sumWord(i, sEnglish,  tfe):
-	total = 0
-	for  j in sEnglish:
-		total += tfe[j, i]
-	return total
-		
-#french = 'training\hansards.36.2.f'
-#english = 'training\hansards.36.2.e'
-french = 'training\example.f'
-english = 'training\example.e'
 
-print ibm1(french, english, 0.5, 5)
+def m_step(lex_counts, lex_normalize):
+    '''
+
+    :param lex_counts:
+    :param lex_normalize:
+    :return:
+    '''
+    lex_param = lex_counts / lex_normalize
+    return lex_param
+
+
+def set_lex_param(init_val, dict_french, dict_english):
+    '''
+    Initialize and return a t(f|e) parameter with uniform initializations.
+    :param init_val:
+    :param dict_french:
+    :param dict_english:
+    :return:
+    '''
+    length_french = len(dict_french)
+    length_english = len(dict_english)
+    lex_param = np.empty([length_english, length_french])
+    lex_param.fill(init_val)
+    return lex_param
+
+
+def set_lex_counts(dict_french, dict_english):
+    '''
+    Initialize and return a count matrix with 0's
+    :param dict_french:
+    :param dict_english:
+    :return:
+    '''
+    length_french = len(dict_french)
+    length_english = len(dict_english)
+    count_matrix = np.zeros((length_french, length_english))
+    return count_matrix
+
+
+def set_normalize(word_dict):
+    '''
+
+    :param word_dict:
+    :return:
+    '''
+    length = len(word_dict)
+    count_matrix = np.zeros((length, 1))
+    return count_matrix
+
+
+def sum_word(french_word, english_sentence, lex_param):
+    '''
+
+    :param french_word:
+    :param english_sentence:
+    :param lex_param:
+    :return:
+    '''
+    total = 0
+    for english_word in english_sentence:
+        total += lex_param[english_word, french_word]
+    return total
+
+
+# french = 'training\hansards.36.2.f'
+# english = 'training\hansards.36.2.e'
+f = 'training\example.f'
+e = 'training\example.e'
+
+print(ibm1(f, e, 0.5, 5))
