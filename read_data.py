@@ -1,7 +1,7 @@
 import numpy as np
 
 def open_file(fileName): 
-	f = open(fileName, 'r')
+	f = open(fileName, 'rb')
 	return f
 
 # translates a sentence to a numpy array and a word to an int

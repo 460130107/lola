@@ -1,26 +1,26 @@
 import numpy as np
 import read_data as rd
 
-def ibm1(foreign, english, initVal, iterations):
-	foreign = rd.open_file(foreign)
+def ibm1(french, english, initVal, iterations):
+	french = rd.open_file(french)
 	english = rd.open_file(english)
-	corpusForeign, dictForeign = rd.wordToInt(foreign)
+	corpusFrench, dictFrench = rd.wordToInt(french)
 	corpusEnglish, dictEnglish = rd.wordToInt(english)
-	tfe = initUniform(initVal, dictForeign, dictEnglish)
+	tfe = initUniform(initVal, dictFrench, dictEnglish)
 	for i in range(0, iterations):
-		cfe, ce = eStep(corpusForeign, corpusEnglish, tfe, dictForeign, dictEnglish)
+		cfe, ce = eStep(corpusFrench, corpusEnglish, tfe, dictFrench, dictEnglish)
 		tfe = mStep(cfe, ce)
 	return tfe
 
 # expectation step, calculating counts
-def eStep(foreign, english, tfe, dictForeign, dictEnglish):
-	lengthC= len(foreign)
-	cfe = setcfeTo0(dictForeign, dictEnglish)
+def eStep(french, english, tfe, dictFrench, dictEnglish):
+	lengthC= len(french)
+	cfe = setcfeTo0(dictFrench, dictEnglish)
 	ce = setceTo0(dictEnglish)
 	for k in range(0, lengthC):
 		sEnglish = english[k]
-		sForeign = foreign[k]
-		for i in sForeign:
+		sFrench = french[k]
+		for i in sFrench:
 			for j in sEnglish:
 				tfeTotal = sumWord(i, sEnglish, tfe)
 				delta = tfe[j,i]/tfeTotal
@@ -33,18 +33,19 @@ def mStep(cfe, ce):
 	return cfe/ce
 
 # Initialize and return a t(f|e) parameter with uniform initializations		
-def initUniform(initVal, dictForeign, dictEnglish):
-	lengthForeign = len(dictForeign)
+def initUniform(initVal, dictFrench, dictEnglish):
+	lengthFrench = len(dictFrench)
 	lengthEnglish = len(dictEnglish)
-	initMatrix = np.empty([lengthEnglish, lengthForeign])
+	print lengthFrench, lengthEnglish
+	initMatrix = np.empty([lengthEnglish, lengthFrench])
 	initMatrix.fill(initVal)
 	return initMatrix
 
 # Initialize and return a count matrix with 0's
-def setcfeTo0(dictForeign, dictEnglish):
-	lengthForeign = len(dictForeign)
+def setcfeTo0(dictFrench, dictEnglish):
+	lengthFrench = len(dictFrench)
 	lengthEnglish = len(dictEnglish)
-	countMatrix = np.zeros((lengthForeign, lengthEnglish))
+	countMatrix = np.zeros((lengthFrench, lengthEnglish))
 	return countMatrix
 	
 def setceTo0(dict):
