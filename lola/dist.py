@@ -15,8 +15,8 @@ def uniform_lexical(e_vocab_size, f_vocab_size, value=None):
     :param value: constant value for lex(e|f) which defaults to 1/|V_F|
     :return: |V_E| x |V_F| numpy array
     """
-    # this is the uniform probability lex(f|e) = 1.0 / |V_F|
     if value is None:
+        # this is the uniform probability lex(f|e) = 1.0 / |V_F|
         value = 1.0/f_vocab_size
     # we create |V_E| (uniform) categorical distributions
     # each of which has a support of |V_F| French words
