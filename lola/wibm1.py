@@ -133,7 +133,9 @@ def m_step(lex_counts):
     # we compute normalisation constants for each English word by summing the cells along the corresponding row
     Z = lex_counts.sum(1)
     # then we divide each row by the corresponding normalisation constant
-    return lex_counts / Z[:,np.newaxis]
+    # the strange syntax is a requirement of numpy, see structural indexing tools in
+    #  http://docs.scipy.org/doc/numpy-1.10.1/user/basics.indexing.html
+    return lex_counts / Z[:, np.newaxis]
 
 
 def main(f_path, e_path):
