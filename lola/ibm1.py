@@ -1,5 +1,5 @@
 import numpy as np
-import read_data as rd
+import lola.read_data as rd
 
 
 def ibm1(french, english, init_val, iterations):
@@ -112,7 +112,7 @@ def sum_word(french_word, english_sentence, lex_param):
 
 # french = 'training\hansards.36.2.f'
 # english = 'training\hansards.36.2.e'
-f = 'training\example.f'
-e = 'training\example.e'
+f = '../training/example.f'
+e = '../training/example.e'
 
 print(ibm1(f, e, 0.5, 5))
