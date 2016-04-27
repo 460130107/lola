@@ -102,7 +102,7 @@ def e_step(f_corpus, e_corpus, lex_parameters):
         # That is, a French *position* j being aligned to an English *position* i.
         # I am choosing to represent it by a table where rows are indexed by English positions
         #  and columns are indexed by French positions
-        # Thus a cell p_ij[i,j] is associated with P(a_j=i|e_0^l,f_1^m)
+        # Thus a cell posterior[i,j] is associated with P(a_j=i|e_0^l,f_1^m)
         posterior = np.zeros((e_snt.size, f_snt.size))
 
         # To compute each cell we start by evaluating the numerator of P(a_j=i|e_0^l,f_1^m) for every possible (i,j)
