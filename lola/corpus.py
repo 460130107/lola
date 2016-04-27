@@ -1,33 +1,27 @@
 import numpy as np
 
 
-def tokenize(path, bos=None, eos=''):
+def tokenize(path, bos=None):
     """
-    This method tokenizes an input corpus and returns a single stream of tokens.
-    It requires an end-of-sentence marker, otherwise it would not be possible to recover sentence boundaries.
-    It may use a begin-of-sentence marker as well.
-    These markers should be unique strings that do not conflict with real vocabulary entries.
+    This method tokenizes an input corpus and returns a stream of tokens.
 
     :param path: path to corpus
     :param bos: this is optional and if set it is added to the beginning of every sentence
-    :param eos: this is not optional, it must be a unique string to represent the boundary
-        it may be an empty string, but not None
-    :return: a list of tokens
+    :return: an np.array of tokens, and an np.array of boundary positions
     """
-    if eos is None:
-        raise ValueError('I need an EOS string: it can be emtpy, but it cannot be None')
     with open(path, 'r') as fi:
-        corpus = []
+        tokens = []
+        boundaries = []
         if bos:
             for line in fi.readlines():
-                corpus.append(bos)
-                corpus.extend(line.split())
-                corpus.append(eos)
+                tokens.append(bos)
+                tokens.extend(line.split())
+                boundaries.append(len(tokens))
         else:
             for line in fi.readlines():
-                corpus.extend(line.split())
-                corpus.append(eos)
-        return corpus
+                tokens.extend(line.split())
+                boundaries.append(len(tokens))
+        return np.array(tokens, dtype='U'), np.array(boundaries, dtype=np.int)
 
 
 class Corpus:
@@ -51,25 +45,20 @@ class Corpus:
 
         with open(path, 'r') as fi:
             # read and tokenize the entire corpus
-            # we mark sentence boundary with empty tokens eos=''
             # and if a null symbol is given, we place it at the beginning of the sentence
-            text_corpus = np.array(tokenize(path, bos=null, eos=''), dtype='U')
-            # memorise the boundary positions
-            self._boundaries = np.where(text_corpus == '')[0]
+            # we also memorise the boundary positions
+            tokens, self._boundaries = tokenize(path, bos=null)
             # use numpy to map tokens to integers
             # lookup converts from integers back to strings
             # inverse represents the corpus with words represented by integers
-            self._lookup, self._inverse = np.unique(text_corpus, return_inverse=True)
+            self._lookup, self._inverse = np.unique(tokens, return_inverse=True)
 
     def itersentences(self):
         """Iterates over sentences"""
         a = 0
         for b in self._boundaries:
-            yield self._inverse[a:b]
-            a = b + 1
-        # this makes it robust to having or not having a boundary symbol in the last sentence
-        if a < self._inverse.size:
-            yield self._inverse[a:]
+            yield self._inverse[a:b]  # this produces a view, not a copy ;)
+            a = b
 
     def translate(self, i):
         """
@@ -81,20 +70,12 @@ class Corpus:
 
     def vocab_size(self):
         """Number of unique tokens (if the corpus was created with added NULL tokens, this will include it)"""
-        return self._lookup.size - 1  # we must discount the boundary symbol
+        return self._lookup.size
 
     def corpus_size(self):
         """Number of tokens in the corpus."""
-        return self._inverse.size - self._boundaries.size
+        return self._inverse.size
 
     def n_sentences(self):
         """Number of sentences in the corpus."""
-
-        # if the last boundary is the last token in the corpus,
-        # then we have as many sentences as boundaries
-        if self._boundaries[-1] == self._inverse.size - 1:
-            return self._boundaries.size
-        # this makes it robust to cases in which we do not represent a boundary for the last sentence
-        # thus we have one more sentence than we have boundaries
-        return self._boundaries.size + 1
-
+        return self._boundaries.size
