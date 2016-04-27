@@ -49,8 +49,6 @@ class Corpus:
         :param null: an optional NULL token to be added to the beginning of every sentence
         """
 
-        self._null_added = null is not None
-
         with open(path, 'r') as fi:
             # read and tokenize the entire corpus
             # we mark sentence boundary with empty tokens eos=''
