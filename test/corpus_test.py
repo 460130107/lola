@@ -24,6 +24,15 @@ class CorpusTestCase(unittest.TestCase):
             for snt in fi:
                 self.e_string_corpus.append(['<NULL>'] + snt.split())  # here we decorate with NULL words
 
+    def test_iter(self):
+        f_corpus_size = 0
+        for f_snt, e_snt in zip(self.F.itersentences(), self.E.itersentences()):
+            for j, f in enumerate(f_snt):  # this is a position j and the f word associated with it
+                f_corpus_size += 1
+                for i, e in enumerate(e_snt):  # this is a position i and the e-word associated with it (it includes the NULL already)
+                    pass
+        self.assertEqual(f_corpus_size, self.F.corpus_size())
+
     def test_f(self):
         reconstructed = []
         for f_snt in self.F.itersentences():

@@ -1,5 +1,4 @@
 import numpy as np
-import itertools
 
 
 def tokenize(path, bos=None, eos=''):
@@ -85,3 +84,19 @@ class Corpus:
     def vocab_size(self):
         """Number of unique tokens (if the corpus was created with added NULL tokens, this will include it)"""
         return self._lookup.size - 1  # we must discount the boundary symbol
+
+    def corpus_size(self):
+        """Number of tokens in the corpus."""
+        return self._inverse.size - self._boundaries.size
+
+    def n_sentences(self):
+        """Number of sentences in the corpus."""
+
+        # if the last boundary is the last token in the corpus,
+        # then we have as many sentences as boundaries
+        if self._boundaries[-1] == self._inverse.size - 1:
+            return self._boundaries.size
+        # this makes it robust to cases in which we do not represent a boundary for the last sentence
+        # thus we have one more sentence than we have boundaries
+        return self._boundaries.size + 1
+
