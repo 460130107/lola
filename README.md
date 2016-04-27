@@ -44,3 +44,10 @@ We develop in `python3` and we like to use `virtualenv`:
         cd test
         python -m unittest *
         
+
+# Examples
+
+You can try:
+
+
+    python -m lola.wibm1
