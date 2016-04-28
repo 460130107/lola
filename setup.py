@@ -29,4 +29,5 @@ setup(
     install_requires=[],
     include_dirs=[np.get_include()],
     ext_modules=ext_modules,
+    extra_compile_args=['-std=c++11']
 )

@@ -1,5 +1,5 @@
 """
-This is a cython implementation of IBM model 1.
+This is a cython implementation of IBM model 1 using sparse categoricals.
 It runs a lot faster than its python equivalent (wibm1.py).
 
 :Authors: - Wilker Aziz
@@ -13,9 +13,36 @@ import logging
 
 from lola.dist import uniform_lexical
 from lola.corpus cimport Corpus
+from lola.sparse cimport SparseCategorical
+
+# cython: boundscheck=False
+# cython: wraparound=False
+# cython: cdivision=True
 
 
-cpdef viterbi1(Corpus f_corpus, Corpus e_corpus, np.float_t[:,::1] lex_parameters, ostream=sys.stdout):
+cdef class LexicalParameters:
+
+    cdef list _cpds
+
+    def __init__(self, int e_vocab_size, int f_vocab_size, float p=0.0):
+        self._cpds = [SparseCategorical(f_vocab_size, p) for _ in range(e_vocab_size)]
+
+    cpdef float get(self, int e, int f):
+        return self._cpds[e].get(f)
+    
+    cpdef float acc(self, int e, int f, float value):
+        return self._cpds[e].acc(f, value)
+
+    cpdef SparseCategorical row(self, int e):
+        return self._cpds[e]
+
+    cpdef normalise(self):
+        cdef SparseCategorical cpd
+        for cpd in self._cpds:
+            cpd.normalise()
+
+
+cpdef viterbi1(Corpus f_corpus, Corpus e_corpus, LexicalParameters lex_parameters, ostream=sys.stdout):
     """
     This writes IBM 1 Viterbi alignments to an output stream.
 
@@ -43,7 +70,7 @@ cpdef viterbi1(Corpus f_corpus, Corpus e_corpus, np.float_t[:,::1] lex_parameter
             best_p = 0
             for i in range(len(e_snt)):
                 e = e_snt[i]
-                p = lex_parameters[e, f]
+                p = lex_parameters.get(e, f)
                 # introduced a deterministic tie-break heuristic that dislikes null-alignments
                 if p > best_p or (p == best_p and best_i == 0):
                     best_p = p
@@ -55,7 +82,7 @@ cpdef viterbi1(Corpus f_corpus, Corpus e_corpus, np.float_t[:,::1] lex_parameter
 
 
 @cython.linetrace(False)
-cdef float ibm1_loglikelihood(Corpus f_corpus, Corpus e_corpus, np.float_t[:,::1] lex_parameters):
+cdef float ibm1_loglikelihood(Corpus f_corpus, Corpus e_corpus, LexicalParameters lex_parameters):
     """
     Computes the log-likelihood of the data under IBM 1 for given parameters.
 
@@ -80,14 +107,14 @@ cdef float ibm1_loglikelihood(Corpus f_corpus, Corpus e_corpus, np.float_t[:,::1
             p = 0.0
             for i in range(len(e_snt)):
                 e = e_snt[i]
-                p += lex_parameters[e, f]
+                p += lex_parameters.get(e, f)
             loglikelihood += np.log(p)
 
     return loglikelihood
 
 
 @cython.linetrace(False)
-cpdef np.float_t[:,::1] ibm1(Corpus f_corpus, Corpus e_corpus, int iterations, bint viterbi=True):
+cpdef LexicalParameters ibm1(Corpus f_corpus, Corpus e_corpus, int iterations, bint viterbi=True):
     """
     Estimate IBM1 parameters via EM for a number of iterations starting from uniform parameters.
 
@@ -97,17 +124,17 @@ cpdef np.float_t[:,::1] ibm1(Corpus f_corpus, Corpus e_corpus, int iterations, b
     :param viterbi: whether or not to print Viterbi alignments after optimisation
     :return: MLE lexical parameters
     """
-
-    cdef np.float_t[:,::1] lex_parameters = uniform_lexical(e_corpus.vocab_size(), f_corpus.vocab_size())
+    # create |V_E| categoricals each over V_F and initialise them uniformly
+    cdef LexicalParameters lex_parameters = LexicalParameters(e_corpus.vocab_size(), f_corpus.vocab_size(), p=1.0/f_corpus.vocab_size())
     cdef size_t iteration
 
     loglikelihood = ibm1_loglikelihood(f_corpus, e_corpus, lex_parameters)
-    print('L{0} {1}'.format(0, loglikelihood), file=sys.stderr)
+    logging.info('L%d %f', 0, loglikelihood)
 
     for iteration in range(iterations):
-        EM_iteration(f_corpus, e_corpus, lex_parameters)
+        lex_parameters = EM_iteration(f_corpus, e_corpus, lex_parameters)
         loglikelihood = ibm1_loglikelihood(f_corpus, e_corpus, lex_parameters)
-        print('L{0} {1}'.format(iteration + 1, loglikelihood), file=sys.stderr)
+        logging.info('L%d %f', iteration + 1, loglikelihood)
 
     # TODO: save lexical parameters for inspection
 
@@ -118,10 +145,7 @@ cpdef np.float_t[:,::1] ibm1(Corpus f_corpus, Corpus e_corpus, int iterations, b
 
 
 @cython.linetrace(False)
-@cython.boundscheck(False)
-@cython.wraparound(False)
-@cython.cdivision(True)
-cdef EM_iteration(Corpus f_corpus, Corpus e_corpus, np.float_t[:,::1] lex_parameters):
+cdef LexicalParameters EM_iteration(Corpus f_corpus, Corpus e_corpus, LexicalParameters lex_parameters):
     """
     The E-step gathers expected/potential counts for different types of events.
     IBM1 uses lexical events only.
@@ -134,8 +158,9 @@ cdef EM_iteration(Corpus f_corpus, Corpus e_corpus, np.float_t[:,::1] lex_parame
     """
 
     cdef size_t S = f_corpus.n_sentences()
-    cdef np.float_t[:,::1] lex_counts = np.zeros(np.shape(lex_parameters), dtype=np.float)
-    cdef np.float_t[::1] lex_totals = np.zeros(e_corpus.vocab_size(), dtype=np.float)
+    cdef LexicalParameters lex_counts = LexicalParameters(e_corpus.vocab_size(), f_corpus.vocab_size(), 0.0)
+    #cdef np.float_t[:,::1] lex_counts = np.zeros(np.shape(lex_parameters), dtype=np.float)
+    #cdef np.float_t[::1] lex_totals = np.zeros(e_corpus.vocab_size(), dtype=np.float)
     cdef np.int_t[::1] f_snt, e_snt
     cdef np.float_t[:,::1] posterior
     cdef size_t s, i, j
@@ -173,7 +198,7 @@ cdef EM_iteration(Corpus f_corpus, Corpus e_corpus, np.float_t[:,::1] lex_parame
             for i in range(len(e_snt)):
                 e = e_snt[i]
                 # if this was IBM 2, we would also have the contribution of a distortion parameter
-                posterior[i, j] += lex_parameters[e, f]
+                posterior[i, j] += lex_parameters.get(e, f)
         # Then we renormalise each column independently by the sum along that column
         posterior /= np.sum(posterior, 0)
 
@@ -183,30 +208,14 @@ cdef EM_iteration(Corpus f_corpus, Corpus e_corpus, np.float_t[:,::1] lex_parame
             f = f_snt[j]
             for i in range(len(e_snt)):
                 e = e_snt[i]
-                lex_counts[e, f] += posterior[i, j]
-                lex_totals[e] += posterior[i, j]
+                lex_counts.acc(e, f, posterior[i, j])
+                #lex_totals[e] += posterior[i, j]
                 # if this was IBM2, we would also accumulate dist_counts[i, j] += posterior
 
         if (s + 1) % 10000 == 0:
-            logging.info('E-step %d/%d sentences', s + 1, S)
+            logging.debug('E-step %d/%d sentences', s + 1, S)
 
     # M-step
-    for i in range(e_corpus.vocab_size()):
-        for j in range(f_corpus.vocab_size()):
-            lex_parameters[i, j] = lex_counts[i, j] / lex_totals[i]
+    lex_counts.normalise()
+    return lex_counts
 
-
-@cython.linetrace(False)
-cdef np.float_t[:,::1] m_step(np.float_t[:,::1] lex_counts):
-    """
-    The M-step simply renormalise potential counts.
-
-    :param lex_counts: potential counts of lexical events.
-    :return: locally optimum lexical parameters
-    """
-    # we compute normalisation constants for each English word by summing the cells along the corresponding row
-    Z = np.sum(lex_counts, 1)
-    # then we divide each row by the corresponding normalisation constant
-    # the strange syntax is a requirement of numpy, see structural indexing tools in
-    #  http://docs.scipy.org/doc/numpy-1.10.1/user/basics.indexing.html
-    return lex_counts / Z[:, np.newaxis]

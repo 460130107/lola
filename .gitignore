@@ -1,1 +1,7 @@
 .idea
+lola/*cpp
+*.so
+*.pyc
+build/
+lola.egg-info
+__pycache__

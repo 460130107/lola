@@ -6,7 +6,7 @@ import sys
 import logging
 
 from lola.corpus import Corpus
-from lola.cibm1 import ibm1
+from lola.sibm1 import ibm1
 
 
 def argparser():
