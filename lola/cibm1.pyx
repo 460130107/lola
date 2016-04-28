@@ -28,7 +28,7 @@ cpdef viterbi1(Corpus f_corpus, Corpus e_corpus, np.float_t[:,::1] lex_parameter
         size_t S = f_corpus.n_sentences()
         size_t s
         np.int_t[::1] f_snt, e_snt
-        np.int_t[:,::1] alignment
+        np.int_t[::1] alignment
         size_t i, j, best_i
         int f, e
         float p, best_p
