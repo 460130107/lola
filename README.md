@@ -36,7 +36,8 @@ We develop in `python3` and we like to use `virtualenv`:
         
 * Build
 
-        python setup.py develop
+        # on mac set CC=clang
+        CFLAGS="-std=c++11" python setup.py develop
 
 
 * Unit tests
