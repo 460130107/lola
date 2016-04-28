@@ -42,9 +42,29 @@ class CorpusTestCase(unittest.TestCase):
             reconstructed.append(snt_reconstruction)
         self.assertEqual(reconstructed, self.f_string_corpus, 'F-reconstruction failed')
 
+    def test_f2(self):
+        reconstructed = []
+        for s in range(self.F.n_sentences()):
+            f_snt = self.F.sentence(s)
+            snt_reconstruction = []
+            for f_word in f_snt:
+                snt_reconstruction.append(self.F.translate(f_word))  # get the string
+            reconstructed.append(snt_reconstruction)
+        self.assertEqual(reconstructed, self.f_string_corpus, 'F-reconstruction failed')
+
     def test_e(self):
         reconstructed = []
         for e_snt in self.E.itersentences():
+            snt_reconstruction = []
+            for e_word in e_snt:
+                snt_reconstruction.append(self.E.translate(e_word))  # get the string
+            reconstructed.append(snt_reconstruction)
+        self.assertEqual(reconstructed, self.e_string_corpus, 'E-reconstruction failed')
+
+    def test_e2(self):
+        reconstructed = []
+        for s in range(self.E.n_sentences()):
+            e_snt = self.E.sentence(s)
             snt_reconstruction = []
             for e_word in e_snt:
                 snt_reconstruction.append(self.E.translate(e_word))  # get the string
