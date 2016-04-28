@@ -36,7 +36,7 @@ cpdef viterbi1(Corpus f_corpus, Corpus e_corpus, np.float_t[:,::1] lex_parameter
     for s in range(S):
         f_snt = f_corpus.sentence(s)
         e_snt = e_corpus.sentence(s)
-        alignment = np.zeros(f_snt.size, dtype=np.int)
+        alignment = np.zeros(len(f_snt), dtype=np.int)
         for j in range(len(f_snt)):
             f = f_snt[j]
             best_i = 0
@@ -122,6 +122,7 @@ cpdef np.float_t[:,::1] ibm1(Corpus f_corpus, Corpus e_corpus, int iterations, b
 @cython.linetrace(False)
 @cython.boundscheck(False)
 @cython.wraparound(False)
+@cython.cdivision(True)
 cdef np.float_t[:,::1] e_step(Corpus f_corpus, Corpus e_corpus, np.float_t[:,::1] lex_parameters):
     """
     The E-step gathers expected/potential counts for different types of events.
@@ -186,7 +187,7 @@ cdef np.float_t[:,::1] e_step(Corpus f_corpus, Corpus e_corpus, np.float_t[:,::1
                 # if this was IBM2, we would also accumulate dist_counts[i, j] += posterior
 
         if (s + 1) % 1000 == 0:
-            logging.info('E-step %d/%d sentences', s, S)
+            logging.info('E-step %d/%d sentences', s + 1, S)
 
     return lex_counts
 
