@@ -2,14 +2,15 @@
 :Authors: - Wilker Aziz
 """
 
-from libcpp.map cimport map as cppmap
-#from libcpp.unordered_map cimport unordered_map as cppmap
+cimport cython
 from libcpp.utility cimport pair as cpppair
 from cython.operator cimport dereference as deref, preincrement as inc
 
 # cython: boundscheck=False
 # cython: wraparound=False
 # cython: cdivision=True
+# cython: nonecheck=False
+
 
 cdef class SparseCategorical:
     """
@@ -44,11 +45,11 @@ cdef class SparseCategorical:
         self._zero *= scalar
 
     cpdef float sum(self):
-        cdef cppmap[int, float].iterator it = self._data.begin()
         cdef float total = 0.0
-        while it != self._data.end():
-            total += deref(it).second
-            inc(it)
+        cdef int k
+        cdef float v
+        for k, v in self._data:
+            total += v
         return total + (self._support_size - self._data.size()) * self._zero
 
     cpdef float acc(self, int key, float value):

@@ -38,7 +38,6 @@ class SparseCategoricalTestCase(unittest.TestCase):
         self.assertEqual(20.0, c1.sum())
         c1.normalise()
         self.assertEqual(1.0, c1.sum())
-        print(c1)
 
 
 if __name__ == '__main__':

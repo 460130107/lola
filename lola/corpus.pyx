@@ -1,5 +1,11 @@
 cimport numpy as np
 import numpy as np
+cimport cython
+
+# cython: boundscheck=False
+# cython: wraparound=False
+# cython: cdivision=True
+# cython: nonecheck=False
 
 
 cdef tuple tokenize(istream, bos=None):
@@ -85,12 +91,12 @@ cdef class Corpus:
 
     cpdef size_t vocab_size(self):
         """Number of unique tokens (if the corpus was created with added NULL tokens, this will include it)"""
-        return self._lookup.size
+        return len(self._lookup)
 
     cpdef size_t corpus_size(self):
         """Number of tokens in the corpus."""
-        return self._inverse.size
+        return len(self._inverse)
 
     cpdef size_t n_sentences(self):
         """Number of sentences in the corpus."""
-        return self._boundaries.size
+        return len(self._boundaries)

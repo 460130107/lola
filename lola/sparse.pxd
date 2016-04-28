@@ -4,7 +4,8 @@ Sparse data structures with C++ underlying containers.
 :Authors: - Wilker Aziz
 """
 
-from libcpp.map cimport map as cppmap
+#from libcpp.map cimport map as cppmap
+from libcpp.unordered_map cimport unordered_map as cppmap
 
 
 cdef class SparseCategorical:

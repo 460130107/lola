@@ -11,13 +11,13 @@ cimport cython
 import sys
 import logging
 
-from lola.dist import uniform_lexical
 from lola.corpus cimport Corpus
 from lola.sparse cimport SparseCategorical
 
 # cython: boundscheck=False
 # cython: wraparound=False
 # cython: cdivision=True
+# cython: nonecheck=False
 
 
 cdef class LexicalParameters:
@@ -81,7 +81,7 @@ cpdef viterbi1(Corpus f_corpus, Corpus e_corpus, LexicalParameters lex_parameter
         print(' '.join(['{0}-{1}'.format(j + 1, i) for j, i in enumerate(alignment)]), file=ostream)
 
 
-@cython.linetrace(False)
+@cython.linetrace(True)
 cdef float ibm1_loglikelihood(Corpus f_corpus, Corpus e_corpus, LexicalParameters lex_parameters):
     """
     Computes the log-likelihood of the data under IBM 1 for given parameters.
@@ -113,7 +113,7 @@ cdef float ibm1_loglikelihood(Corpus f_corpus, Corpus e_corpus, LexicalParameter
     return loglikelihood
 
 
-@cython.linetrace(False)
+@cython.linetrace(True)
 cpdef LexicalParameters ibm1(Corpus f_corpus, Corpus e_corpus, int iterations, bint viterbi=True):
     """
     Estimate IBM1 parameters via EM for a number of iterations starting from uniform parameters.
@@ -144,7 +144,7 @@ cpdef LexicalParameters ibm1(Corpus f_corpus, Corpus e_corpus, int iterations, b
     return lex_parameters
 
 
-@cython.linetrace(False)
+@cython.linetrace(True)
 cdef LexicalParameters EM_iteration(Corpus f_corpus, Corpus e_corpus, LexicalParameters lex_parameters):
     """
     The E-step gathers expected/potential counts for different types of events.
@@ -159,10 +159,8 @@ cdef LexicalParameters EM_iteration(Corpus f_corpus, Corpus e_corpus, LexicalPar
 
     cdef size_t S = f_corpus.n_sentences()
     cdef LexicalParameters lex_counts = LexicalParameters(e_corpus.vocab_size(), f_corpus.vocab_size(), 0.0)
-    #cdef np.float_t[:,::1] lex_counts = np.zeros(np.shape(lex_parameters), dtype=np.float)
-    #cdef np.float_t[::1] lex_totals = np.zeros(e_corpus.vocab_size(), dtype=np.float)
     cdef np.int_t[::1] f_snt, e_snt
-    cdef np.float_t[:,::1] posterior
+    cdef np.float_t[::1] posterior_aj
     cdef size_t s, i, j
     cdef int f, e
 
@@ -187,33 +185,31 @@ cdef LexicalParameters EM_iteration(Corpus f_corpus, Corpus e_corpus, LexicalPar
 
         # Observe that the posterior for a candidate alignment link is a distribution over assignments of a_j=i
         # That is, a French *position* j being aligned to an English *position* i.
-        # I am choosing to represent it by a table where rows are indexed by English positions
-        #  and columns are indexed by French positions
-        # Thus a cell posterior[i,j] is associated with P(a_j=i|e_0^l,f_1^m)
-        posterior = np.zeros((np.size(e_snt), np.size(f_snt)), dtype=np.float)
+        # For a given French position j, I am choosing to represent it by a vector indexed by English positions
+        # Thus a cell posterior_aj[i] is associated with P(a_j=i|e_0^l,f_1^m)
 
-        # To compute each cell we start by evaluating the numerator of P(a_j=i|e_0^l,f_1^m) for every possible (i,j)
         for j in range(len(f_snt)):
             f = f_snt[j]
+            posterior_aj = np.zeros(len(e_snt))
+
+            # To compute the probability of each outcome of a_j
+            # we start by evaluating the numerator of P(a_j=i|e_0^l,f_1^m) for every possible i
             for i in range(len(e_snt)):
                 e = e_snt[i]
                 # if this was IBM 2, we would also have the contribution of a distortion parameter
-                posterior[i, j] += lex_parameters.get(e, f)
-        # Then we renormalise each column independently by the sum along that column
-        posterior /= np.sum(posterior, 0)
+                posterior_aj[i] = lex_parameters.get(e, f)
+            # Then we normalise it making a proper cpd
+            posterior_aj /= np.sum(posterior_aj)
 
-        # Once the (normalised) posterior probability of each candidate alignment link has been computed
-        #  we can easily gather partial counts
-        for j in range(len(f_snt)):
-            f = f_snt[j]
+            # Once the (normalised) posterior probability of each outcome has been computed
+            #  we can easily gather partial counts
             for i in range(len(e_snt)):
                 e = e_snt[i]
-                lex_counts.acc(e, f, posterior[i, j])
-                #lex_totals[e] += posterior[i, j]
-                # if this was IBM2, we would also accumulate dist_counts[i, j] += posterior
+                lex_counts.acc(e, f, posterior_aj[i])
+                # if this was IBM2, we would also accumulate dist_counts.acc(i, j, posterior_aj[i])
 
-        if (s + 1) % 10000 == 0:
-            logging.debug('E-step %d/%d sentences', s + 1, S)
+        #if (s + 1) % 10000 == 0:
+        #    logging.debug('E-step %d/%d sentences', s + 1, S)
 
     # M-step
     lex_counts.normalise()
