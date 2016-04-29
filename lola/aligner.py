@@ -6,7 +6,7 @@ import sys
 import logging
 
 from lola.corpus import Corpus
-from lola.sibm1 import ibm1
+from lola.sibm1 import EM
 
 
 def argparser():
@@ -70,7 +70,7 @@ def main():
     logging.info('Reading data')
     if args.french and args.english:
         f_corpus = Corpus(args.french)
-        e_corpus = Corpus(args.english)
+        e_corpus = Corpus(args.english, null='<NULL>')
     else:
         f_stream = []
         e_stream = []
@@ -81,11 +81,11 @@ def main():
             f_stream.append(parts[0])
             e_stream.append(parts[1])
         f_corpus = Corpus(f_stream)
-        e_corpus = Corpus(e_stream)
+        e_corpus = Corpus(e_stream, null='<NULL>')
 
     if args.ibm1 > 0:
         logging.info('Starting %d iterations of IBM model 1', args.ibm1)
-        ibm1(f_corpus, e_corpus, args.ibm1)
+        EM(f_corpus, e_corpus, args.ibm1, model_type='IBM1', viterbi=True)
 
 
 if __name__ == '__main__':

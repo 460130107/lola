@@ -22,12 +22,11 @@ ext_modules = cythonize('**/*.pyx',
 setup(
     name='lola',
     license='Apache 2.0',
-    authors='Guido Linders and Wilker Aziz',
+    author='Guido Linders and Wilker Aziz',
     description='Log-linear alignment models',
     version='0.0.dev1',
     packages=['lola'],
     install_requires=[],
     include_dirs=[np.get_include()],
-    ext_modules=ext_modules,
-    extra_compile_args=['-std=c++11']
+    ext_modules=ext_modules
 )

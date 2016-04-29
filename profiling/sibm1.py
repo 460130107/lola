@@ -1,5 +1,5 @@
 from lola.corpus import Corpus
-from lola.sibm1 import ibm1
+from lola.sibm1 import EM
 import logging
 
 def main(f_path, e_path, iterations=10, viterbi=True):
@@ -7,7 +7,7 @@ def main(f_path, e_path, iterations=10, viterbi=True):
     f_corpus = Corpus(f_path)
     e_corpus = Corpus(e_path, null='<NULL>')
 
-    ibm1(f_corpus, e_corpus, iterations, viterbi)
+    EM(f_corpus, e_corpus, iterations, viterbi=viterbi)
 
 
 if __name__ == '__main__':
