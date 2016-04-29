@@ -14,6 +14,9 @@ cdef class Corpus:
     cdef object _lookup
     cdef np.int_t[::1] _inverse
     cdef np.int_t[::1] _boundaries
+    cdef int _max_len
+
+    cpdef int max_len(self)
 
     cpdef np.int_t[::1] sentence(self, size_t i)
 

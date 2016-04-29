@@ -1,9 +1,12 @@
 """
-This is a cython implementation of IBM model 1.
-It runs a lot faster than its python equivalent (wibm1.py).
+This is a cython implementation of zeroth-order HMM alignment models (e.g. IBM1 and IBM2).
 
 :Authors: - Wilker Aziz
 """
+# cython: boundscheck=False
+# cython: wraparound=False
+# cython: cdivision=True
+# cython: nonecheck=False
 
 import numpy as np
 cimport numpy as np
@@ -11,13 +14,14 @@ cimport cython
 import sys
 import logging
 
-from lola.dist import uniform_lexical
 from lola.corpus cimport Corpus
+from lola.params cimport LexicalParameters
+from lola.model cimport Model, SufficientStatistics, IBM1, IBM1ExpectedCounts
 
 
-cpdef viterbi1(Corpus f_corpus, Corpus e_corpus, np.float_t[:,::1] lex_parameters, ostream=sys.stdout):
+cpdef viterbi_alignments(Corpus f_corpus, Corpus e_corpus, Model model, ostream=sys.stdout):
     """
-    This writes IBM 1 Viterbi alignments to an output stream.
+    This writes Viterbi alignments to an output stream.
 
     :param f_corpus:
     :param e_corpus:
@@ -38,12 +42,10 @@ cpdef viterbi1(Corpus f_corpus, Corpus e_corpus, np.float_t[:,::1] lex_parameter
         e_snt = e_corpus.sentence(s)
         alignment = np.zeros(len(f_snt), dtype=np.int)
         for j in range(len(f_snt)):
-            f = f_snt[j]
             best_i = 0
             best_p = 0
             for i in range(len(e_snt)):
-                e = e_snt[i]
-                p = lex_parameters[e, f]
+                p = model.posterior(e_snt, f_snt, i, j)
                 # introduced a deterministic tie-break heuristic that dislikes null-alignments
                 if p > best_p or (p == best_p and best_i == 0):
                     best_p = p
@@ -54,8 +56,7 @@ cpdef viterbi1(Corpus f_corpus, Corpus e_corpus, np.float_t[:,::1] lex_parameter
         print(' '.join(['{0}-{1}'.format(j + 1, i) for j, i in enumerate(alignment)]), file=ostream)
 
 
-@cython.linetrace(False)
-cdef float ibm1_loglikelihood(Corpus f_corpus, Corpus e_corpus, np.float_t[:,::1] lex_parameters):
+cdef float loglikelihood(Corpus f_corpus, Corpus e_corpus, Model model):
     """
     Computes the log-likelihood of the data under IBM 1 for given parameters.
 
@@ -76,72 +77,76 @@ cdef float ibm1_loglikelihood(Corpus f_corpus, Corpus e_corpus, np.float_t[:,::1
         f_snt = f_corpus.sentence(s)
         e_snt = e_corpus.sentence(s)
         for j in range(len(f_snt)):
-            f = f_snt[j]
             p = 0.0
             for i in range(len(e_snt)):
-                e = e_snt[i]
-                p += lex_parameters[e, f]
+                p += model.likelihood(e_snt, f_snt, i, j)
             loglikelihood += np.log(p)
 
     return loglikelihood
 
 
-@cython.linetrace(False)
-cpdef np.float_t[:,::1] ibm1(Corpus f_corpus, Corpus e_corpus, int iterations, bint viterbi=True):
+cpdef Model EM(Corpus f_corpus, Corpus e_corpus, int iterations, str model_type='IBM1'):
     """
-    Estimate IBM1 parameters via EM for a number of iterations starting from uniform parameters.
+    MLE estimates via EM for zeroth-order HMMs.
 
     :param f_corpus: an instance of Corpus (without NULL tokens)
     :param e_corpus: an instance of Corpus (with NULL tokens)
     :param iterations: a number of iterations
+    :param model_type: reserved for future use (e.g. IBM1, IBM2, VogelIBM2, HMM)
     :param viterbi: whether or not to print Viterbi alignments after optimisation
-    :return: MLE lexical parameters
+    :return: model
     """
+    # TODO: construct IMB1 or IBM2 depending on model type
+    cdef Model model
+    cdef SufficientStatistics suffstats
 
-    cdef np.float_t[:,::1] lex_parameters = uniform_lexical(e_corpus.vocab_size(), f_corpus.vocab_size())
+    if model_type == 'IBM1':
+        model = IBM1(LexicalParameters(e_corpus.vocab_size(),
+                                             f_corpus.vocab_size(),
+                                             p=1.0/f_corpus.vocab_size()))
+        suffstats = IBM1ExpectedCounts(e_corpus.vocab_size(),
+                                       f_corpus.vocab_size())
+    elif model_type == 'IBM2':
+        pass   # TODO: instantiate IBM2 objects
+    else:
+        raise ValueError('I do not know this type of model: %s' % model_type)
+
     cdef size_t iteration
 
-    loglikelihood = ibm1_loglikelihood(f_corpus, e_corpus, lex_parameters)
-    print('L{0} {1}'.format(0, loglikelihood), file=sys.stderr)
+    cdef float L = loglikelihood(f_corpus, e_corpus, model)
+    logging.info('L%d %f', 0, L)
 
     for iteration in range(iterations):
-        EM_iteration(f_corpus, e_corpus, lex_parameters)
-        loglikelihood = ibm1_loglikelihood(f_corpus, e_corpus, lex_parameters)
-        print('L{0} {1}'.format(iteration + 1, loglikelihood), file=sys.stderr)
+        e_step(f_corpus, e_corpus, model, suffstats)
+        model = m_step(suffstats)
+        L = loglikelihood(f_corpus, e_corpus, model)
+        logging.info('L%d %f', iteration + 1, L)
 
     # TODO: save lexical parameters for inspection
 
-    if viterbi:  # Viterbi alignments
-        viterbi1(f_corpus, e_corpus, lex_parameters)
-
-    return lex_parameters
+    return model
 
 
-@cython.linetrace(False)
-@cython.boundscheck(False)
-@cython.wraparound(False)
-@cython.cdivision(True)
-cdef EM_iteration(Corpus f_corpus, Corpus e_corpus, np.float_t[:,::1] lex_parameters):
+cdef e_step(Corpus f_corpus, Corpus e_corpus, Model model, SufficientStatistics suffstats):
     """
-    The E-step gathers expected/potential counts for different types of events.
+    The E-step gathers expected/potential counts for different types of events updating
+    the sufficient statistics.
+
     IBM1 uses lexical events only.
     IBM2 uses lexical envents and distortion events.
 
     :param f_corpus:
     :param e_corpus:
-    :param lex_parameters:
-    :return:
+    :param model: a zeroth-order HMM
+    :param suffstats: a sufficient statistics object compatible with the model
     """
 
     cdef size_t S = f_corpus.n_sentences()
-    cdef np.float_t[:,::1] lex_counts = np.zeros(np.shape(lex_parameters), dtype=np.float)
-    cdef np.float_t[::1] lex_totals = np.zeros(e_corpus.vocab_size(), dtype=np.float)
     cdef np.int_t[::1] f_snt, e_snt
-    cdef np.float_t[:,::1] posterior
+    cdef np.float_t[::1] posterior_aj
     cdef size_t s, i, j
     cdef int f, e
 
-    # E-step
     for s in range(S):
         f_snt = f_corpus.sentence(s)
         e_snt = e_corpus.sentence(s)
@@ -162,51 +167,38 @@ cdef EM_iteration(Corpus f_corpus, Corpus e_corpus, np.float_t[:,::1] lex_parame
 
         # Observe that the posterior for a candidate alignment link is a distribution over assignments of a_j=i
         # That is, a French *position* j being aligned to an English *position* i.
-        # I am choosing to represent it by a table where rows are indexed by English positions
-        #  and columns are indexed by French positions
-        # Thus a cell posterior[i,j] is associated with P(a_j=i|e_0^l,f_1^m)
-        posterior = np.zeros((np.size(e_snt), np.size(f_snt)), dtype=np.float)
+        # For a given French position j, I am choosing to represent it by a vector indexed by English positions
+        # Thus a cell posterior_aj[i] is associated with P(a_j=i|e_0^l,f_1^m)
 
-        # To compute each cell we start by evaluating the numerator of P(a_j=i|e_0^l,f_1^m) for every possible (i,j)
         for j in range(len(f_snt)):
             f = f_snt[j]
+            posterior_aj = np.zeros(len(e_snt))
+
+            # To compute the probability of each outcome of a_j
+            # we start by evaluating the numerator of P(a_j=i|e_0^l,f_1^m) for every possible i
             for i in range(len(e_snt)):
                 e = e_snt[i]
                 # if this was IBM 2, we would also have the contribution of a distortion parameter
-                posterior[i, j] += lex_parameters[e, f]
-        # Then we renormalise each column independently by the sum along that column
-        posterior /= np.sum(posterior, 0)
+                posterior_aj[i] = model.posterior(e_snt, f_snt, i, j)
+            # Then we normalise it making a proper cpd
+            posterior_aj /= np.sum(posterior_aj)
 
-        # Once the (normalised) posterior probability of each candidate alignment link has been computed
-        #  we can easily gather partial counts
-        for j in range(len(f_snt)):
-            f = f_snt[j]
+            # Once the (normalised) posterior probability of each outcome has been computed
+            #  we can easily gather partial counts
             for i in range(len(e_snt)):
-                e = e_snt[i]
-                lex_counts[e, f] += posterior[i, j]
-                lex_totals[e] += posterior[i, j]
-                # if this was IBM2, we would also accumulate dist_counts[i, j] += posterior
+                #e = e_snt[i]
+                #lex_counts.plus_equals(e, f, posterior_aj[i])
+                suffstats.observation(e_snt, f_snt, i, j, posterior_aj[i])
+                # if this was IBM2, we would also accumulate dist_counts.plus_equals(i, j, posterior_aj[i])
 
-        if (s + 1) % 10000 == 0:
-            logging.info('E-step %d/%d sentences', s + 1, S)
-
-    # M-step
-    for i in range(e_corpus.vocab_size()):
-        for j in range(f_corpus.vocab_size()):
-            lex_parameters[i, j] = lex_counts[i, j] / lex_totals[i]
+        #if (s + 1) % 10000 == 0:
+        #    logging.debug('E-step %d/%d sentences', s + 1, S)
 
 
-@cython.linetrace(False)
-cdef np.float_t[:,::1] m_step(np.float_t[:,::1] lex_counts):
+cpdef Model m_step(SufficientStatistics suffstats):
     """
-    The M-step simply renormalise potential counts.
-
-    :param lex_counts: potential counts of lexical events.
-    :return: locally optimum lexical parameters
+    The M-step normalises the sufficient statistics for each event type and construct a new model.
     """
-    # we compute normalisation constants for each English word by summing the cells along the corresponding row
-    Z = np.sum(lex_counts, 1)
-    # then we divide each row by the corresponding normalisation constant
-    # the strange syntax is a requirement of numpy, see structural indexing tools in
-    #  http://docs.scipy.org/doc/numpy-1.10.1/user/basics.indexing.html
-    return lex_counts / Z[:, np.newaxis]
+    return suffstats.make_model()
+
+

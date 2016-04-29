@@ -1,11 +1,11 @@
-cimport numpy as np
-import numpy as np
-cimport cython
-
 # cython: boundscheck=False
 # cython: wraparound=False
 # cython: cdivision=True
 # cython: nonecheck=False
+
+cimport numpy as np
+import numpy as np
+cimport cython
 
 
 cdef tuple tokenize(istream, bos=None):
@@ -62,6 +62,19 @@ cdef class Corpus:
         # lookup converts from integers back to strings
         # inverse represents the corpus with words represented by integers
         self._lookup, self._inverse = np.unique(tokens, return_inverse=True)
+
+        cdef int a = 0
+        cdef int max_len = 0
+        cdef int b
+        for b in self._boundaries:
+            if b - a > max_len:
+                max_len = b - a
+            a = b
+        self._max_len = max_len
+
+    cpdef int max_len(self):
+        """Returns the length of the longest sentence in the corpus."""
+        return self._max_len
 
     cpdef np.int_t[::1] sentence(self, size_t i):
         """

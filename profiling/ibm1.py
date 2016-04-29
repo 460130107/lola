@@ -1,5 +1,5 @@
 from lola.corpus import Corpus
-from lola.sibm1 import EM, viterbi_alignments
+from lola.hmm0 import EM, viterbi_alignments
 import logging
 
 

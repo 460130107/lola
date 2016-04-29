@@ -1,12 +1,9 @@
-"""
-:Authors: - Wilker Aziz
-"""
 import argparse
 import sys
 import logging
 
 from lola.corpus import Corpus
-from lola.sibm1 import EM, viterbi_alignments
+from lola.hmm0 import EM, viterbi_alignments
 
 
 def argparser():
@@ -50,9 +47,6 @@ def cmd_logging(group):
     group.add_argument('--likelihood',
                        type=str, metavar='FILE',
                        help='Save log-likelihood progress')
-    #group.add_argument('--profile',
-    #                   type=str, metavar='FILE',
-    #                   help='Save profiling information')
     group.add_argument('-v', '--verbose', default=0,
                         action='count',
                         help='Verbosity level')

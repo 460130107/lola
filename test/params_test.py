@@ -4,7 +4,7 @@
 
 import unittest
 
-from lola.sparse import SparseCategorical
+from lola.params import SparseCategorical
 
 
 class SparseCategoricalTestCase(unittest.TestCase):

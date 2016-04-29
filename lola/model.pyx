@@ -1,6 +1,3 @@
-"""
-Authors: - Wilker Aziz
-"""
 import numpy as np
 
 cdef class Model:
@@ -112,7 +109,7 @@ cdef class IBM1(Model):
         :param j: French position
         :return: 1.0/(l + 1) * lex(f_j|e_i)
         """
-        cdef float dist_parameter = 1.0 / (len(e_snt) + 1)
+        cdef float dist_parameter = 1.0 / len(e_snt)
         return dist_parameter * self._lex_parameters.get(e_snt[i], f_snt[j])
 
     cpdef float posterior(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):

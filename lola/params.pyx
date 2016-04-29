@@ -1,15 +1,12 @@
-"""
-:Authors: - Wilker Aziz
-"""
+# cython: boundscheck=False
+# cython: wraparound=False
+# cython: cdivision=True
+# cython: nonecheck=False
 
 cimport cython
 from libcpp.utility cimport pair as cpppair
 from cython.operator cimport dereference as deref, preincrement as inc
 
-# cython: boundscheck=False
-# cython: wraparound=False
-# cython: cdivision=True
-# cython: nonecheck=False
 
 
 cdef class SparseCategorical:
@@ -145,3 +142,6 @@ cdef class LexicalParameters:
         cdef SparseCategorical cpd
         for cpd in self._cpds:
             cpd.normalise()
+
+
+# TODO: write a class for Vogel's distortion parameters

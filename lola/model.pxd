@@ -1,9 +1,5 @@
-"""
-Authors: - Wilker Aziz
-"""
-
 cimport numpy as np
-from lola.sparse cimport LexicalParameters
+from lola.params cimport LexicalParameters
 
 
 cdef class Model:
@@ -29,3 +25,11 @@ cdef class IBM1ExpectedCounts(SufficientStatistics):
 
     cdef LexicalParameters _lex_counts
 
+
+"""
+cdef class IBM2(Model):
+
+    cdef LexicalParameters _lex_parameters
+    # declare a numpy array (memory view)
+    cdef np.float_t[::1] _dist_parameters
+"""
