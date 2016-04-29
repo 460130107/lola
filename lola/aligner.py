@@ -6,7 +6,7 @@ import sys
 import logging
 
 from lola.corpus import Corpus
-from lola.sibm1 import EM
+from lola.sibm1 import EM, viterbi_alignments
 
 
 def argparser():
@@ -85,7 +85,8 @@ def main():
 
     if args.ibm1 > 0:
         logging.info('Starting %d iterations of IBM model 1', args.ibm1)
-        EM(f_corpus, e_corpus, args.ibm1, model_type='IBM1', viterbi=True)
+        model = EM(f_corpus, e_corpus, args.ibm1, model_type='IBM1')
+        viterbi_alignments(f_corpus, e_corpus, model)
 
 
 if __name__ == '__main__':

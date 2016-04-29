@@ -13,7 +13,7 @@ import logging
 
 from lola.corpus cimport Corpus
 from lola.sparse cimport LexicalParameters
-from lola.model cimport Model, IBM1
+from lola.model cimport Model, SufficientStatistics, IBM1, IBM1ExpectedCounts
 
 # cython: boundscheck=False
 # cython: wraparound=False
@@ -47,7 +47,7 @@ cpdef viterbi_alignments(Corpus f_corpus, Corpus e_corpus, Model model, ostream=
             best_i = 0
             best_p = 0
             for i in range(len(e_snt)):
-                p = model.pij(e_snt, f_snt, i, j)
+                p = model.posterior(e_snt, f_snt, i, j)
                 # introduced a deterministic tie-break heuristic that dislikes null-alignments
                 if p > best_p or (p == best_p and best_i == 0):
                     best_p = p
@@ -81,20 +81,20 @@ cdef float loglikelihood(Corpus f_corpus, Corpus e_corpus, Model model):
         for j in range(len(f_snt)):
             p = 0.0
             for i in range(len(e_snt)):
-                p += model.pij(e_snt, f_snt, i, j)
+                p += model.likelihood(e_snt, f_snt, i, j)
             loglikelihood += np.log(p)
 
     return loglikelihood
 
 
-cpdef Model EM(Corpus f_corpus, Corpus e_corpus, int iterations, str model_type='IBM1', bint viterbi=True):
+cpdef Model EM(Corpus f_corpus, Corpus e_corpus, int iterations, str model_type='IBM1'):
     """
-    Estimate IBM1 parameters via EM for a number of iterations starting from uniform parameters.
+    MLE estimates via EM for zeroth-order HMMs.
 
     :param f_corpus: an instance of Corpus (without NULL tokens)
     :param e_corpus: an instance of Corpus (with NULL tokens)
     :param iterations: a number of iterations
-    :param model_type: reserved for future use (e.g. 1, 2, etc.)
+    :param model_type: reserved for future use (e.g. IBM1, IBM2, VogelIBM2, HMM)
     :param viterbi: whether or not to print Viterbi alignments after optimisation
     :return: model
     """
@@ -102,45 +102,44 @@ cpdef Model EM(Corpus f_corpus, Corpus e_corpus, int iterations, str model_type=
     cdef Model model = IBM1(LexicalParameters(e_corpus.vocab_size(),
                                              f_corpus.vocab_size(),
                                              p=1.0/f_corpus.vocab_size()))
+    cdef SufficientStatistics suffstats = IBM1ExpectedCounts(e_corpus.vocab_size(),
+                                                             f_corpus.vocab_size())
     cdef size_t iteration
 
     cdef float L = loglikelihood(f_corpus, e_corpus, model)
     logging.info('L%d %f', 0, L)
 
     for iteration in range(iterations):
-
-        EM_iteration(f_corpus, e_corpus, model)
+        e_step(f_corpus, e_corpus, model, suffstats)
+        model = m_step(suffstats)
         L = loglikelihood(f_corpus, e_corpus, model)
         logging.info('L%d %f', iteration + 1, L)
 
     # TODO: save lexical parameters for inspection
 
-    if viterbi:  # Viterbi alignments
-        viterbi_alignments(f_corpus, e_corpus, model)
-
     return model
 
 
-cdef EM_iteration(Corpus f_corpus, Corpus e_corpus, Model model):
+cdef e_step(Corpus f_corpus, Corpus e_corpus, Model model, SufficientStatistics suffstats):
     """
-    The E-step gathers expected/potential counts for different types of events.
+    The E-step gathers expected/potential counts for different types of events updating
+    the sufficient statistics.
+
     IBM1 uses lexical events only.
     IBM2 uses lexical envents and distortion events.
 
     :param f_corpus:
     :param e_corpus:
-    :param lex_parameters:
-    :return:
+    :param model: a zeroth-order HMM
+    :param suffstats: a sufficient statistics object compatible with the model
     """
 
     cdef size_t S = f_corpus.n_sentences()
-    #cdef LexicalParameters lex_counts = LexicalParameters(e_corpus.vocab_size(), f_corpus.vocab_size(), 0.0)
     cdef np.int_t[::1] f_snt, e_snt
     cdef np.float_t[::1] posterior_aj
     cdef size_t s, i, j
     cdef int f, e
 
-    # E-step
     for s in range(S):
         f_snt = f_corpus.sentence(s)
         e_snt = e_corpus.sentence(s)
@@ -173,7 +172,7 @@ cdef EM_iteration(Corpus f_corpus, Corpus e_corpus, Model model):
             for i in range(len(e_snt)):
                 e = e_snt[i]
                 # if this was IBM 2, we would also have the contribution of a distortion parameter
-                posterior_aj[i] = model.pij(e_snt, f_snt, i, j)
+                posterior_aj[i] = model.posterior(e_snt, f_snt, i, j)
             # Then we normalise it making a proper cpd
             posterior_aj /= np.sum(posterior_aj)
 
@@ -182,14 +181,17 @@ cdef EM_iteration(Corpus f_corpus, Corpus e_corpus, Model model):
             for i in range(len(e_snt)):
                 #e = e_snt[i]
                 #lex_counts.plus_equals(e, f, posterior_aj[i])
-                model.count(e_snt, f_snt, i, j, posterior_aj[i])
+                suffstats.observation(e_snt, f_snt, i, j, posterior_aj[i])
                 # if this was IBM2, we would also accumulate dist_counts.plus_equals(i, j, posterior_aj[i])
 
         #if (s + 1) % 10000 == 0:
         #    logging.debug('E-step %d/%d sentences', s + 1, S)
 
-    # M-step
-    #lex_counts.normalise()
-    model.normalise()
-    #return lex_counts
+
+cpdef Model m_step(SufficientStatistics suffstats):
+    """
+    The M-step normalises the sufficient statistics for each event type and construct a new model.
+    """
+    return suffstats.make_model()
+
 
