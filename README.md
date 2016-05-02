@@ -51,4 +51,4 @@ We develop in `python3` and we like to use `virtualenv`:
 You can try:
 
 
-    python -m lola.wibm1
+    time python -m lola.aligner -f training/example.f -e training/example.e -v --ibm1 5 --ibm2 5

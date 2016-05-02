@@ -29,6 +29,12 @@ cdef class Model:
         """
         pass
 
+    cpdef initialise(self, dict initialiser):
+        """
+        Some models can be initialised from other models parameters.
+        """
+        pass
+
 
 cdef class SufficientStatistics:
     """
@@ -98,6 +104,9 @@ cdef class IBM1(Model):
 
     def __init__(self, LexicalParameters lex_parameters):
         self._lex_parameters = lex_parameters
+
+    cpdef LexicalParameters lexical_parameters(self):
+        return self._lex_parameters
 
     cpdef float likelihood(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
         """

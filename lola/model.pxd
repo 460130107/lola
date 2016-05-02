@@ -8,6 +8,8 @@ cdef class Model:
 
     cpdef float posterior(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j)
 
+    cpdef initialise(self, dict initialiser)
+
 
 cdef class SufficientStatistics:
 
@@ -19,6 +21,8 @@ cdef class SufficientStatistics:
 cdef class IBM1(Model):
 
     cdef LexicalParameters _lex_parameters
+
+    cpdef LexicalParameters lexical_parameters(self)
 
 
 cdef class IBM1ExpectedCounts(SufficientStatistics):

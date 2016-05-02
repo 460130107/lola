@@ -17,6 +17,7 @@ import logging
 from lola.corpus cimport Corpus
 from lola.params cimport LexicalParameters
 from lola.model cimport Model, SufficientStatistics, IBM1, IBM1ExpectedCounts
+from lola.jump_ibm2 import IBM2, IBM2ExpectedCounts, JumpParameters
 
 
 cpdef viterbi_alignments(Corpus f_corpus, Corpus e_corpus, Model model, ostream=sys.stdout):
@@ -53,7 +54,7 @@ cpdef viterbi_alignments(Corpus f_corpus, Corpus e_corpus, Model model, ostream=
             alignment[j] = best_i
         # in printing we make the French sentence 1-based by convention
         # we keep the English sentence 0-based because of the NULL token
-        print(' '.join(['{0}-{1}'.format(j + 1, i) for j, i in enumerate(alignment)]), file=ostream)
+        print(' '.join(['{0}-{1}'.format(i, j + 1) for j, i in enumerate(alignment)]), file=ostream)
 
 
 cdef float loglikelihood(Corpus f_corpus, Corpus e_corpus, Model model):
@@ -85,7 +86,7 @@ cdef float loglikelihood(Corpus f_corpus, Corpus e_corpus, Model model):
     return loglikelihood
 
 
-cpdef Model EM(Corpus f_corpus, Corpus e_corpus, int iterations, str model_type='IBM1'):
+cpdef Model EM(Corpus f_corpus, Corpus e_corpus, int iterations, Model model, SufficientStatistics suffstats):
     """
     MLE estimates via EM for zeroth-order HMMs.
 
@@ -96,21 +97,6 @@ cpdef Model EM(Corpus f_corpus, Corpus e_corpus, int iterations, str model_type=
     :param viterbi: whether or not to print Viterbi alignments after optimisation
     :return: model
     """
-    # TODO: construct IMB1 or IBM2 depending on model type
-    cdef Model model
-    cdef SufficientStatistics suffstats
-
-    if model_type == 'IBM1':
-        model = IBM1(LexicalParameters(e_corpus.vocab_size(),
-                                             f_corpus.vocab_size(),
-                                             p=1.0/f_corpus.vocab_size()))
-        suffstats = IBM1ExpectedCounts(e_corpus.vocab_size(),
-                                       f_corpus.vocab_size())
-    elif model_type == 'IBM2':
-        pass   # TODO: instantiate IBM2 objects
-    else:
-        raise ValueError('I do not know this type of model: %s' % model_type)
-
     cdef size_t iteration
 
     cdef float L = loglikelihood(f_corpus, e_corpus, model)
