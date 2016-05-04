@@ -52,3 +52,8 @@ You can try:
 
 
     time python -m lola.aligner -f training/example.f -e training/example.e -v --ibm1 5 --ibm2 5
+
+
+For an example of feature extraction check
+
+    python -m lola.extractor
