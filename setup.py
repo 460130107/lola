@@ -15,7 +15,7 @@ except ImportError:
 
 ext_modules = cythonize('**/*.pyx',
                         language='c++',
-                        exclude=[],
+                        exclude=['lola/ibm2.pyx'],
                         language_level=3,
                         )
 

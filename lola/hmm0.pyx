@@ -3,10 +3,13 @@ This is a cython implementation of zeroth-order HMM alignment models (e.g. IBM1 
 
 :Authors: - Wilker Aziz
 """
+
+"""
 # cython: boundscheck=False
 # cython: wraparound=False
 # cython: cdivision=True
 # cython: nonecheck=False
+"""
 
 import numpy as np
 cimport numpy as np
@@ -15,17 +18,16 @@ import sys
 import logging
 
 from lola.corpus cimport Corpus
-from lola.params cimport LexicalParameters
-from lola.model cimport Model, SufficientStatistics, IBM1, IBM1ExpectedCounts
-from lola.jump_ibm2 import IBM2, IBM2ExpectedCounts, JumpParameters
+from lola.component cimport GenerativeComponent
+from lola.model cimport GenerativeModel, SufficientStatistics, ExpectedCounts
 
 
-cpdef viterbi_alignments(Corpus f_corpus, Corpus e_corpus, Model model, ostream=sys.stdout):
+cpdef float viterbi_alignments(Corpus e_corpus, Corpus f_corpus, GenerativeModel model, ostream=sys.stdout):
     """
     This writes Viterbi alignments to an output stream.
 
-    :param f_corpus:
     :param e_corpus:
+    :param f_corpus:
     :param lex_parameters:
     :param ostream: output stream
     """
@@ -48,7 +50,7 @@ cpdef viterbi_alignments(Corpus f_corpus, Corpus e_corpus, Model model, ostream=
             for i in range(len(e_snt)):
                 p = model.posterior(e_snt, f_snt, i, j)
                 # introduced a deterministic tie-break heuristic that dislikes null-alignments
-                if p > best_p or (p == best_p and best_i == 0):
+                if p > best_p:
                     best_p = p
                     best_i = i
             alignment[j] = best_i
@@ -57,12 +59,12 @@ cpdef viterbi_alignments(Corpus f_corpus, Corpus e_corpus, Model model, ostream=
         print(' '.join(['{0}-{1}'.format(i, j + 1) for j, i in enumerate(alignment)]), file=ostream)
 
 
-cdef float loglikelihood(Corpus f_corpus, Corpus e_corpus, Model model):
+cpdef float loglikelihood(Corpus e_corpus, Corpus f_corpus, GenerativeModel model):
     """
     Computes the log-likelihood of the data under IBM 1 for given parameters.
 
-    :param f_corpus: an instance of Corpus (without NULL tokens)
     :param e_corpus: an instance of Corpus (with NULL tokens)
+    :param f_corpus: an instance of Corpus (without NULL tokens)
     :param lex_parameters: a collection of |V_E| categoricals over the French vocabulary V_F
     :return: log of \prod_{f_1^m,e_0^l} \prod_{j=1}^m \sum_{i=0}^l lex(f_j|e_i)
     """
@@ -86,34 +88,73 @@ cdef float loglikelihood(Corpus f_corpus, Corpus e_corpus, Model model):
     return loglikelihood
 
 
-cpdef Model EM(Corpus f_corpus, Corpus e_corpus, int iterations, Model model, SufficientStatistics suffstats):
+cpdef float empirical_cross_entropy(Corpus e_corpus, Corpus f_corpus, GenerativeModel model, float log_zero=-99):
+    """
+    Computes H(p*, p) = - 1/N \sum_{s=1}^N p(f^s|e^s)
+        where p is a model distribution
+        p* is the unknown true distribution
+        and we have N iid samples.
+
+    Note that perplexity can be obtained by computing 2^H(p*,p).
+
+    :param e_corpus: an instance of Corpus (with NULL tokens)
+    :param f_corpus: an instance of Corpus (without NULL tokens)
+    :param model: a probability model
+    :return: H(p*, p)
+    """
+    cdef:
+        float log_p_s
+        float entropy = 0.0
+        size_t S = f_corpus.n_sentences()
+        np.int_t[::1] f_snt, e_snt
+        size_t s, i, j
+        int e, f
+        float p
+
+    for s in range(S):
+        f_snt = f_corpus.sentence(s)
+        e_snt = e_corpus.sentence(s)
+        log_p_s = 0.0
+        for j in range(len(f_snt)):
+            p = 0.0
+            for i in range(len(e_snt)):
+                p += model.likelihood(e_snt, f_snt, i, j)
+            if p == 0:  # entropy is typically computed for test sets as well, where some words can be unknown
+                log_p_s += log_zero
+            else:
+                log_p_s += np.log(p)
+        entropy += log_p_s
+
+    return - entropy / S
+
+
+cpdef tuple EM(Corpus e_corpus, Corpus f_corpus, int iterations, GenerativeModel model):
     """
     MLE estimates via EM for zeroth-order HMMs.
 
-    :param f_corpus: an instance of Corpus (without NULL tokens)
     :param e_corpus: an instance of Corpus (with NULL tokens)
+    :param f_corpus: an instance of Corpus (without NULL tokens)
     :param iterations: a number of iterations
     :param model_type: reserved for future use (e.g. IBM1, IBM2, VogelIBM2, HMM)
     :param viterbi: whether or not to print Viterbi alignments after optimisation
-    :return: model
+    :return: model, entropy log
     """
     cdef size_t iteration
-
-    cdef float L = loglikelihood(f_corpus, e_corpus, model)
-    logging.info('L%d %f', 0, L)
+    cdef float H = empirical_cross_entropy(e_corpus, f_corpus, model)
+    logging.info('I=%d H=%f', 0, H)
+    cdef list entropy_log = [H]
 
     for iteration in range(iterations):
-        e_step(f_corpus, e_corpus, model, suffstats)
-        model = m_step(suffstats)
-        L = loglikelihood(f_corpus, e_corpus, model)
-        logging.info('L%d %f', iteration + 1, L)
+        suffstats = e_step(e_corpus, f_corpus, model)
+        m_step(model, suffstats)
+        H = empirical_cross_entropy(e_corpus, f_corpus, model)
+        entropy_log.append(H)
+        logging.info('I=%d H=%f', iteration + 1, H)
 
-    # TODO: save lexical parameters for inspection
-
-    return model
+    return model, entropy_log
 
 
-cdef e_step(Corpus f_corpus, Corpus e_corpus, Model model, SufficientStatistics suffstats):
+cdef ExpectedCounts e_step(Corpus e_corpus, Corpus f_corpus, GenerativeModel model):
     """
     The E-step gathers expected/potential counts for different types of events updating
     the sufficient statistics.
@@ -121,12 +162,13 @@ cdef e_step(Corpus f_corpus, Corpus e_corpus, Model model, SufficientStatistics 
     IBM1 uses lexical events only.
     IBM2 uses lexical envents and distortion events.
 
-    :param f_corpus:
     :param e_corpus:
+    :param f_corpus:
     :param model: a zeroth-order HMM
     :param suffstats: a sufficient statistics object compatible with the model
     """
 
+    cdef ExpectedCounts suffstats = <ExpectedCounts> model.suffstats()
     cdef size_t S = f_corpus.n_sentences()
     cdef np.int_t[::1] f_snt, e_snt
     cdef np.float_t[::1] posterior_aj
@@ -179,12 +221,16 @@ cdef e_step(Corpus f_corpus, Corpus e_corpus, Model model, SufficientStatistics 
 
         #if (s + 1) % 10000 == 0:
         #    logging.debug('E-step %d/%d sentences', s + 1, S)
+    return suffstats
 
 
-cpdef Model m_step(SufficientStatistics suffstats):
+cpdef m_step(GenerativeModel model, ExpectedCounts suffstats):
     """
     The M-step normalises the sufficient statistics for each event type and construct a new model.
     """
-    return suffstats.make_model()
+    cdef GenerativeComponent comp
+    for comp in suffstats.components():
+        comp.normalise()
+    model.update(suffstats.components())
 
 

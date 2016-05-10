@@ -1,9 +1,8 @@
-# cython: boundscheck=False
-# cython: wraparound=False
-# cython: cdivision=True
-# cython: nonecheck=False
+"""
+Auxiliary data structures for sparse representations.
 
-cimport cython
+"""
+
 from libcpp.utility cimport pair as cpppair
 from cython.operator cimport dereference as deref, preincrement as inc
 
@@ -100,48 +99,5 @@ cdef class SparseCategorical:
         return Z
 
     def __str__(self):
-        return ' '.join(['{0}:{1}'.format(k,v) for k, v in self._data])
-
-
-cdef class LexicalParameters:
-    """
-    This is a collection of sparse categorical distributions:
-        * one distribution per English word
-        * each distribution defined over the French vocabulary
-    """
-
-    def __init__(self, int e_vocab_size, int f_vocab_size, float p=0.0):
-        """
-
-        :param e_vocab_size: size of English vocabulary (number of categorical distributions)
-        :param f_vocab_size: size of French vocabulary (support of each categorical distribution)
-        :param p: initial value (e.g. use 1.0/f_vocab_size to get uniform distributions)
-        """
-        self._cpds = [SparseCategorical(f_vocab_size, p) for _ in range(e_vocab_size)]
-
-    cpdef size_t e_vocab_size(self):
-        return len(self._cpds)
-
-    cpdef size_t f_vocab_size(self):
-        return self._cpds[0].support_size() if len(self._cpds) else 0
-
-    cpdef float get(self, int e, int f):
-        """Get the parameter value associated with cat(f|e)."""
-        return self._cpds[e].get(f)
-
-    cpdef float plus_equals(self, int e, int f, float value):
-        """Adds to the parameter value associated with cat(f|e)."""
-        return self._cpds[e].plus_equals(f, value)
-
-    cpdef SparseCategorical row(self, int e):
-        """Return the categorical associated with the conditioning context e."""
-        return self._cpds[e]
-
-    cpdef normalise(self):
-        """Normalise each distribution by its total mass."""
-        cdef SparseCategorical cpd
-        for cpd in self._cpds:
-            cpd.normalise()
-
-
-# TODO: write a class for Vogel's distortion parameters
+        cdef str mapped = ' '.join(['{0}:{1}'.format(k,v) for k, v in sorted(dict(self._data).items(), key=lambda pair: pair[0])])
+        return 'support=%d base-value=%d mapped=(%s)' % (self._support_size, self._base_value, mapped)

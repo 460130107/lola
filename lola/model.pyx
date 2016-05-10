@@ -1,5 +1,56 @@
 import numpy as np
 
+
+cdef class SufficientStatistics:
+    """
+    This is used to gather sufficient statistics under a certain model.
+    The typical use is to accumulated expected counts from (potential) observations.
+
+    This object also knows how to construct a new model based on up-to-date statistics.
+    """
+
+    cpdef observation(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
+        """
+        Account for a potential observation.
+
+        :param e_snt: e_0^l
+        :param f_snt: f_1^l
+        :param i: English position
+        :param j: French position
+        :param p: probability of observation, i.e., normalised posterior p(a_j=i | f, e)
+        """
+        pass
+
+
+cdef class ExpectedCounts(SufficientStatistics):
+    """
+    This is used to gather sufficient statistics under a certain model.
+    The typical use is to accumulated expected counts from (potential) observations.
+
+    This object also knows how to construct a new model based on up-to-date statistics.
+    """
+
+    def __init__(self, components):
+        self._components = list(components)
+
+    cpdef observation(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
+        """
+        Account for a potential observation.
+
+        :param e_snt: e_0^l
+        :param f_snt: f_1^l
+        :param i: English position
+        :param j: French position
+        :param p: probability of observation, i.e., normalised posterior p(a_j=i | f, e)
+        """
+        cdef GenerativeComponent comp
+        for comp in self._components:
+            comp.plus_equals(e_snt, f_snt, i, j, p)
+
+    cpdef list components(self):
+        return self._components
+
+
 cdef class Model:
     """
     A 0th-order alignment model, that is, alignment links are independent on one another.
@@ -35,78 +86,35 @@ cdef class Model:
         """
         pass
 
-
-cdef class SufficientStatistics:
-    """
-    This is used to gather sufficient statistics under a certain model.
-    The typical use is to accumulated expected counts from (potential) observations.
-
-    This object also knows how to construct a new model based on up-to-date statistics.
-    """
-
-    cpdef observation(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
+    cpdef SufficientStatistics suffstats(self):
         """
-        Account for a potential observation.
-
-        :param e_snt: e_0^l
-        :param f_snt: f_1^l
-        :param i: English position
-        :param j: French position
-        :param p: probability of observation, i.e., normalised posterior p(a_j=i | f, e)
+        Return an object that gather sufficient statistics (to be used in the E-step).
         """
         pass
 
-    cpdef Model make_model(self):
+    cpdef update(self, list components):
         """
-        Construct a new model based on sufficient statistics and reset statistics to zero.
+        Make a new instance of the same model based on gathered sufficient statistics (to be used in the M-step).
         """
         pass
 
 
-cdef class IBM1ExpectedCounts(SufficientStatistics):
-
-    def __init__(self, size_t e_vocab_size, f_vocab_size):
-        self._lex_counts = LexicalParameters(e_vocab_size,
-                                             f_vocab_size,
-                                             0.0)
-
-    cpdef observation(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
-        """
-        Account for a potential observation:
-            * f_j generated from e_i
-
-        :param e_snt: e_0^l
-        :param f_snt: f_1^l
-        :param i: English position
-        :param j: French position
-        :param p: probability of observation, i.e., normalised posterior p(a_j=i | f, e)
-        """
-        self._lex_counts.plus_equals(e_snt[i], f_snt[j], p)
-
-    cpdef Model make_model(self):
-        """
-        Return a model whose parameters are the normalised expected lexical counts.
-        This also resets the sufficient statistics to zero.
-        :return: an instance of IBM1
-        """
-        self._lex_counts.normalise()
-        cdef Model model = IBM1(self._lex_counts)
-        self._lex_counts = LexicalParameters(self._lex_counts.e_vocab_size(),
-                                             self._lex_counts.f_vocab_size(),
-                                             0.0)
-        return model
-
-
-cdef class IBM1(Model):
+cdef class GenerativeModel(Model):
     """
-    An IBM1 is a 0th-order model with lexical parameters only.
+    A 0th-order alignment model, that is, alignment links are independent on one another.
     """
 
-    def __init__(self, LexicalParameters lex_parameters):
-        self._lex_parameters = lex_parameters
+    def __init__(self, components):
+        self._components = list(components)
 
-    cpdef LexicalParameters lexical_parameters(self):
-        return self._lex_parameters
+    def __iter__(self):
+        return iter(self._components)
+
+    cpdef size_t n_components(self):
+        return len(self._components)
+
+    cpdef GenerativeComponent component(self, int i):
+        return self._components[i]
 
     cpdef float likelihood(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
         """
@@ -116,10 +124,13 @@ cdef class IBM1(Model):
         :param f_snt: f_1^l
         :param i: English position
         :param j: French position
-        :return: 1.0/(l + 1) * lex(f_j|e_i)
+        :return: p(a_j = i, f | e)
         """
-        cdef float dist_parameter = 1.0 / len(e_snt)
-        return dist_parameter * self._lex_parameters.get(e_snt[i], f_snt[j])
+        cdef GenerativeComponent comp
+        cdef float l = 1.0
+        for comp in self._components:
+            l *= comp.get(e_snt, f_snt, i, j)
+        return l
 
     cpdef float posterior(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
         """
@@ -129,8 +140,24 @@ cdef class IBM1(Model):
         :param f_snt: f_1^l
         :param i: English position
         :param j: French position
-        :return: lex(f_j|e_i)
+        :return: Z * p(a_j = i | f, e)
         """
-        return self._lex_parameters.get(e_snt[i], f_snt[j])
+        cdef GenerativeComponent comp
+        cdef float l = 1.0
+        for comp in self._components:
+            l *= comp.get(e_snt, f_snt, i, j)
+        return l
 
-# TODO: write IBM2 (Vogel's parameterisation)
+    cpdef SufficientStatistics suffstats(self):
+        """
+        This is a collection of counters for generative components.
+        :return:
+        """
+        cdef list components = []
+        cdef GenerativeComponent comp
+        for comp in self._components:
+            components.append(comp.zeros())
+        return ExpectedCounts(components)
+
+    cpdef update(self, list components):
+        self._components = list(components)

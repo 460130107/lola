@@ -1,7 +1,5 @@
-# cython: boundscheck=False
-# cython: wraparound=False
-# cython: cdivision=True
-# cython: nonecheck=False
+"""
+"""
 
 cimport numpy as np
 import numpy as np
@@ -113,3 +111,78 @@ cdef class Corpus:
     cpdef size_t n_sentences(self):
         """Number of sentences in the corpus."""
         return len(self._boundaries)
+
+    cpdef Corpus underlying(self):
+        """Returns itself"""
+        return self
+
+
+
+cdef class CorpusView(Corpus):
+    """
+    A corpus view wraps a Corpus object exposing only a subset of its sentences.
+
+    A few things remain unchaged though:
+        * max length
+        * vocab size
+        * corpus size (in tokens)
+    These are simply delegated to the underlying corpus.
+
+    This class exists to unify training and test vocabulary and word ids.
+    """
+
+    def __init__(self, Corpus corpus, size_t offset, size_t size):
+        """
+
+        :param corpus: a Corpus
+        :param offset: where to start from (0-based)
+        :param size: how many sentences to include
+        """
+        self._corpus = corpus
+        self._offset = offset
+        self._size = size
+
+    cpdef int max_len(self):
+        """Returns the length of the longest sentence in the corpus."""
+        return self._corpus.max_len()
+
+    cpdef np.int_t[::1] sentence(self, size_t i):
+        """
+        Return the ith sentence. This is not checked for out-of-bound conditions.
+        :param i: 0-based sentence id
+        :return: memory view corresponding to the sentence
+        """
+        return self._corpus.sentence(self._offset + i)
+
+    def itersentences(self):
+        """Iterates over sentences"""
+        cdef size_t i
+        for i in range(self._offset, self._offset + self._size):
+            yield self._corpus.sentence(i)
+
+    cpdef translate(self, size_t i):
+        """
+        Translate an integer back to a string.
+        :param i: index representing the word
+        :return: original string
+        """
+        return self._corpus.translate(i)
+
+    cpdef size_t vocab_size(self):
+        """Number of unique tokens (if the corpus was created with added NULL tokens, this will include it)"""
+        return self._corpus.vocab_size()
+
+    cpdef size_t corpus_size(self):
+        """Number of tokens in the corpus."""
+        return self._corpus.corpus_size()
+
+    cpdef size_t n_sentences(self):
+        """Number of sentences in the corpus."""
+        return self._size
+
+    cpdef Corpus underlying(self):
+        """Returns the underlying Corpus object"""
+        return self._corpus
+
+
+

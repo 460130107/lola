@@ -1,5 +1,17 @@
 cimport numpy as np
-from lola.params cimport LexicalParameters
+from lola.component cimport GenerativeComponent
+
+
+cdef class SufficientStatistics:
+
+    cpdef observation(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p)
+
+
+cdef class ExpectedCounts(SufficientStatistics):
+
+    cdef list _components
+
+    cpdef list components(self)
 
 
 cdef class Model:
@@ -10,30 +22,17 @@ cdef class Model:
 
     cpdef initialise(self, dict initialiser)
 
+    cpdef SufficientStatistics suffstats(self)
 
-cdef class SufficientStatistics:
-
-    cpdef observation(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p)
-
-    cpdef Model make_model(self)
+    cpdef update(self, list components)
 
 
-cdef class IBM1(Model):
+cdef class GenerativeModel(Model):
 
-    cdef LexicalParameters _lex_parameters
+    cdef list _components
 
-    cpdef LexicalParameters lexical_parameters(self)
+    cpdef size_t n_components(self)
 
-
-cdef class IBM1ExpectedCounts(SufficientStatistics):
-
-    cdef LexicalParameters _lex_counts
+    cpdef GenerativeComponent component(self, int i)
 
 
-"""
-cdef class IBM2(Model):
-
-    cdef LexicalParameters _lex_parameters
-    # declare a numpy array (memory view)
-    cdef np.float_t[::1] _dist_parameters
-"""

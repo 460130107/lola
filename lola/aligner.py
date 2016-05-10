@@ -2,38 +2,10 @@ import argparse
 import sys
 import logging
 
-from lola.corpus import Corpus
+from lola.corpus import Corpus, CorpusView
 import lola.hmm0 as hmm0
-from lola.model import IBM1, IBM1ExpectedCounts
-from lola.params import LexicalParameters
-from lola.jump_ibm2 import IBM2, IBM2ExpectedCounts, JumpParameters
-
-
-def EM(f_corpus, e_corpus, iterations, model_type, initialiser=None):
-    if model_type == 'IBM1':
-        model = IBM1(LexicalParameters(e_corpus.vocab_size(),
-                                       f_corpus.vocab_size(),
-                                       p=1.0/f_corpus.vocab_size()))
-        suffstats = IBM1ExpectedCounts(e_corpus.vocab_size(),
-                                       f_corpus.vocab_size())
-    elif model_type == 'IBM2':
-        model = IBM2(LexicalParameters(e_corpus.vocab_size(),
-                                       f_corpus.vocab_size(),
-                                       p=1.0/f_corpus.vocab_size()),
-                     JumpParameters(e_corpus.max_len(),
-                                    f_corpus.max_len(),
-                                    1.0/(e_corpus.max_len() + f_corpus.max_len() + 1)))
-        suffstats = IBM2ExpectedCounts(e_corpus.vocab_size(),
-                                       f_corpus.vocab_size(),
-                                       e_corpus.max_len(),
-                                       f_corpus.max_len())
-    else:
-        raise ValueError('I do not know this type of model: %s' % model_type)
-
-    if initialiser is not None:
-        model.initialise(initialiser)
-
-    return hmm0.EM(f_corpus, e_corpus, iterations, model, suffstats)
+from lola.component import LexicalParameters, JumpParameters, BrownDistortionParameters
+from lola.basic_ibm import IBM1, VogelIBM2, BrownIBM2
 
 
 def argparser():
@@ -44,19 +16,26 @@ def argparser():
     parser.description = 'Log-linear alignment models'
     parser.formatter_class = argparse.ArgumentDefaultsHelpFormatter
 
-    parser.add_argument('bitext', nargs='?', metavar='BITEXT',
-                        type=argparse.FileType('r'), default=sys.stdin,
-                        help='One sentence pair per line (French ||| English). '
-                             'This is used only if -f and -e are not provided.')
     parser.add_argument('-f', '--french', metavar='FILE',
                         type=str,
                         help='French corpus (the data we generate)')
     parser.add_argument('-e', '--english', metavar='FILE',
                         type=str,
                         help='English corpus (the data we condition on)')
+    parser.add_argument('--test-f', metavar='FILE',
+                        type=str,
+                        help='A French test corpus (the date we generate)')
+    parser.add_argument('--test-e', metavar='FILE',
+                        type=str,
+                        help='An English test corpus (the date we condition on)')
+    parser.add_argument('--merge', action='store_true', default=False,
+                        help='Merge training and test set for training')
     parser.add_argument('--lexparams', metavar='FILE',
                         type=str,
                         help='Save lexical parameters')
+    parser.add_argument('--distortion-type', choices=['Vogel', 'Brown'],
+                        type=str, default='Vogel',
+                        help='Type of distortion parameters')
 
     cmd_estimation(parser.add_argument_group('Parameter estimation'))
 
@@ -79,12 +58,153 @@ def cmd_estimation(group):
 
 
 def cmd_logging(group):
-    group.add_argument('--likelihood',
+    group.add_argument('--save-entropy',
                        type=str, metavar='FILE',
-                       help='Save log-likelihood progress')
+                       help='Save empirical cross entropy progress')
+    group.add_argument('--viterbi', metavar='PATH',
+                       type=str,
+                       help='Save Viterbi alignments to a file')
     group.add_argument('-v', '--verbose', default=0,
                         action='count',
                         help='Verbosity level')
+
+
+def get_corpora(training_path, test_path, generating):
+    """
+    Return training and test data.
+
+    :param training_path: path to training corpus
+    :param test_path: path to test corpus (or None)
+    :param generating: whether this is the side we are generating (French)
+    :return:
+    """
+    if test_path is None:  # not test corpus
+        if generating:
+            corpus = Corpus(training_path)
+        else:  # we are conditioning on this corpus
+            corpus = Corpus(training_path, null='<NULL>')
+        return corpus, None
+    else:
+        # read training data
+        with open(training_path, 'r') as fi:
+            lines = fi.readlines()
+        n_training = len(lines)
+        # read test data
+        with open(test_path, 'r') as fi:
+            lines.extend(fi.readlines())
+        n_test = len(lines) - n_training
+        # create a big corpus with everything
+        if generating:
+            corpus = Corpus(lines)
+        else:  # we are conditioning on this corpus
+            corpus = Corpus(lines, null='<NULL>')
+        # return two different views: the training view and the test view
+        return CorpusView(corpus, 0, n_training), CorpusView(corpus, n_training, n_test)
+
+
+def save_viterbi(e_corpus, f_corpus, model, path):
+    with open(path, 'w') as fo:
+        hmm0.viterbi_alignments(e_corpus, f_corpus, model, ostream=fo)
+
+
+def save_entropy(entropies, path):
+    with open(path, 'w') as fo:
+        for h in entropies:
+            print(h, file=fo)
+
+
+def get_ibm1(e_corpus, f_corpus):
+    return IBM1(LexicalParameters(e_corpus.vocab_size(),
+                                  f_corpus.vocab_size(),
+                                  p=1.0 / f_corpus.vocab_size()))
+
+
+def get_ibm2(e_corpus, f_corpus, dist_type='Vogel'):
+    if dist_type == 'Vogel':
+        return VogelIBM2(LexicalParameters(e_corpus.vocab_size(),
+                                           f_corpus.vocab_size(),
+                                           p=1.0 / f_corpus.vocab_size()),
+                         JumpParameters(e_corpus.max_len(),
+                                        f_corpus.max_len(),
+                                        1.0 / (e_corpus.max_len() + f_corpus.max_len() + 1)))
+    elif dist_type == 'Brown':
+        return BrownIBM2(LexicalParameters(e_corpus.vocab_size(),
+                                           f_corpus.vocab_size(),
+                                           p=1.0 / f_corpus.vocab_size()),
+                         BrownDistortionParameters(e_corpus.max_len(),
+                                                   1.0 / (e_corpus.max_len())))
+
+
+def initial_model(e_corpus, f_corpus, model_type, dist_type, initialiser=None):
+    if model_type == 'IBM1':
+        model = get_ibm1(e_corpus, f_corpus)
+    elif model_type == 'IBM2':
+        model = get_ibm2(e_corpus, f_corpus, dist_type)
+    else:
+        raise ValueError('I do not know this type of model: %s' % model_type)
+
+    if initialiser is not None:
+        model.initialise(initialiser)
+
+    return model
+
+
+def train_and_apply(e_training, f_training, apply_to, iterations, model_type, args, initialiser=None):
+    logging.info('Starting %d iterations of %s', iterations, model_type)
+    # get an initial model (possibly based on previously trained models)
+    model = initial_model(e_training, f_training, model_type, args.distortion_type, initialiser)
+    # train it with EM for a number of iterations
+    model, training_entropy = hmm0.EM(e_training, f_training, iterations, model)
+
+    if args.save_entropy:  # save the entropy of each EM iteration
+        save_entropy(training_entropy, '{0}.{1}.EM'.format(args.save_entropy, model_type))
+
+    entropies = []
+    # apply model to each parallel corpus
+    for name, e_corpus, f_corpus in apply_to:
+        corpus_entropy = hmm0.empirical_cross_entropy(e_corpus, f_corpus, model)
+
+        entropies.append(corpus_entropy)
+        logging.info('%s %s set perplexity: %f', model_type, name, corpus_entropy)
+
+        if args.viterbi:
+            logging.info('Saving %s Viterbi decisions for %s', model_type, name)
+            # apply model to training data
+            save_viterbi(e_corpus, f_corpus, model, '{0}.{1}.{2}.viterbi'.format(args.viterbi, model_type, name))
+
+    return model, entropies
+
+
+def pipeline(e_training, f_training, apply_to, args):
+
+    if args.ibm1 > 0:
+        ibm1, ibm1_entropies = train_and_apply(e_training,
+                                               f_training,
+                                               apply_to,
+                                               args.ibm1,
+                                               'IBM1',
+                                               args)
+
+        # TODO: save IBM1 entropies
+
+    else:
+        ibm1 = None
+
+    if args.ibm2 > 0:
+        initialiser = {}
+        # configure initialisation
+        if ibm1 is not None:
+            initialiser['IBM1'] = ibm1
+
+        ibm2, ibm2_entropies = train_and_apply(e_training,
+                                               f_training,
+                                               apply_to,
+                                               args.ibm2,
+                                               'IBM2',
+                                               args,
+                                               initialiser)
+        # TODO: save IBM2 entropies
+
 
 
 def main():
@@ -95,38 +215,28 @@ def main():
     elif args.verbose > 1:
         logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s %(message)s', datefmt='%H:%M:%S')
 
-    # read corpus
+    # read corpora
     logging.info('Reading data')
-    if args.french and args.english:
-        f_corpus = Corpus(args.french)
-        e_corpus = Corpus(args.english, null='<NULL>')
-    else:
-        f_stream = []
-        e_stream = []
-        for line in args.bitext:
-            parts = line.strip().split(' ||| ')
-            if len(parts) != 2:  # ignore unaligned sentence pairs
-                continue
-            f_stream.append(parts[0])
-            e_stream.append(parts[1])
-        f_corpus = Corpus(f_stream)
-        e_corpus = Corpus(e_stream, null='<NULL>')
+    f_training, f_test = get_corpora(args.french, args.test_f, True)
+    e_training, e_test = get_corpora(args.english, args.test_e, True)
 
-    if args.ibm1 > 0:
-        logging.info('Starting %d iterations of IBM model 1', args.ibm1)
-        ibm1 = EM(f_corpus, e_corpus, args.ibm1, model_type='IBM1')
-        if args.ibm2 == 0:
-            hmm0.viterbi_alignments(f_corpus, e_corpus, ibm1)
-    else:
-        ibm1 = None
+    # we will always apply our model to the training corpus after EM
+    apply_to = [('training', e_training, f_training)]
 
-    if args.ibm2 > 0:
-        logging.info('Starting %d iterations of IBM model 2', args.ibm2)
-        initialiser = {}
-        if ibm1 is not None:
-            initialiser['IBM1'] = ibm1
-        ibm2 = EM(f_corpus, e_corpus, args.ibm2, model_type='IBM2', initialiser=initialiser)
-        hmm0.viterbi_alignments(f_corpus, e_corpus, ibm2)
+    if e_test and f_test:  # and if we have a test set, we also apply to it
+        apply_to.append(('test', e_test, f_test))
+
+    if args.merge:  # sometimes to avoid OOVs we merge training and test before EM
+        # note that this is not cheating because the task remains unsupervised
+        e_merged = e_training.underlying()
+        f_merged = f_training.underlying()
+    else:
+        e_merged = e_training
+        f_merged = f_training
+
+    pipeline(e_merged, f_merged, apply_to, args)
+
+
 
 if __name__ == '__main__':
     main()

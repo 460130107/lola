@@ -27,3 +27,14 @@ cdef class Corpus:
     cpdef size_t corpus_size(self)
 
     cpdef size_t n_sentences(self)
+
+    cpdef Corpus underlying(self)
+
+cdef class CorpusView(Corpus):
+
+    cdef:
+        size_t _offset
+        size_t _size
+        Corpus _corpus
+
+
