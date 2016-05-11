@@ -5,3 +5,4 @@ lola/*cpp
 build/
 lola.egg-info
 __pycache__
+debug/
