@@ -1,5 +1,7 @@
 cimport numpy as np
+from lola.corpus cimport Corpus
 from lola.sparse cimport SparseCategorical
+from lola.sparse cimport CPDTable
 
 
 cdef class GenerativeComponent:
@@ -12,38 +14,45 @@ cdef class GenerativeComponent:
 
     cpdef GenerativeComponent zeros(self)
 
+    cpdef save(self, Corpus e_corpus, Corpus f_corpus, str path)
+
 
 cdef class LexicalParameters(GenerativeComponent):
 
-    cdef list _cpds
+    cdef CPDTable _cpds
+    cdef size_t _e_vocab_size
+    cdef size_t _f_vocab_size
+
 
     cpdef size_t e_vocab_size(self)
 
     cpdef size_t f_vocab_size(self)
 
-    cpdef SparseCategorical row(self, int e)
 
+cdef class DistortionParameters(GenerativeComponent):
 
-cdef class UniformAlignment(GenerativeComponent):
+    pass
+
+cdef class UniformAlignment(DistortionParameters):
 
     pass
 
 
-cdef class JumpParameters(GenerativeComponent):
+cdef class JumpParameters(DistortionParameters):
 
     cdef:
         int _max_english_len
         int _max_french_len
         SparseCategorical _categorical
 
-    cpdef int jump(self, int l, int m, int i, int j)
+    cdef int jump(self, int l, int m, int i, int j)
 
     cpdef int max_english_len(self)
 
     cpdef int max_french_len(self)
 
 
-cdef class BrownDistortionParameters(GenerativeComponent):
+cdef class BrownDistortionParameters(DistortionParameters):
 
     cdef:
         int _max_english_len

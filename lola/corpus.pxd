@@ -11,9 +11,9 @@ cdef class Corpus:
     Remark: This object offers no guarantee as to which exact index any word will get. Not even the NULL word.
     """
 
-    cdef object _lookup
-    cdef np.int_t[::1] _inverse
-    cdef np.int_t[::1] _boundaries
+    cdef readonly object _lookup
+    cdef readonly np.int_t[::1] _inverse
+    cdef readonly np.int_t[::1] _boundaries
     cdef int _max_len
 
     cpdef int max_len(self)
@@ -30,11 +30,10 @@ cdef class Corpus:
 
     cpdef Corpus underlying(self)
 
+
 cdef class CorpusView(Corpus):
 
     cdef:
         size_t _offset
         size_t _size
         Corpus _corpus
-
-

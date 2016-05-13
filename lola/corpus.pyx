@@ -1,4 +1,12 @@
 """
+
+Not using these cython macros for now:
+
+# cython: boundscheck=False
+# cython: wraparound=False
+# cython: cdivision=True
+# cython: nonecheck=False
+
 """
 
 cimport numpy as np
@@ -80,8 +88,8 @@ cdef class Corpus:
         :param i: 0-based sentence id
         :return: memory view corresponding to the sentence
         """
-        cdef size_t a = 0 if i == 0 else self._boundaries[i - 1]
-        cdef size_t b = self._boundaries[i]
+        cdef int a = 0 if i == 0 else self._boundaries[i - 1]
+        cdef int b = self._boundaries[i]
         return self._inverse[a:b]
 
     def itersentences(self):

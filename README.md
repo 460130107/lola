@@ -60,6 +60,22 @@ You can try:
     # note that it is okay to concatenate the sets because the task remains unsupervised and in normal uses there is no such a distinction between training and test sets, this distinction only makes sense when we are interested in computing AER for the test set based on some manual alignments
     time python -m lola.aligner -f training/example.f -e training/example.e -v --ibm1 5 --ibm2 5 --test-f training/example.test.f --test-e training/example.test.e --merge  --viterbi training/merged --save-entropy training/merged.entropy
 
+
+    # current interface
+    time python -m lola.aligner debug/5k -f training/5k.f -e training/5k.e -v --ibm1 3 --ibm2 2 --test-f training/fr-en/testing/test/test.f --test-e training/fr-en/testing/test/test.e --merge --viterbi --save-parameters --naacl --posterior --save-entropy --skip-null
+
+* the first value is the output directory
+* then we have chosen a training set
+* a few iterations of ibm1 and ibm2
+* a test set
+* we decided to merge training and test to avoid OOVs
+* we decided to save the viterbi alignments
+* to save the parameters of the model (after EM)
+* and to save alignments also in NAACL format
+* in NAACL format we can also have the posterior probability of each alignment
+* we are saving the entropy of EM iterations
+* and we are not printing alignments to NULL (the model does align things to NULL, we just do not print it)
+
 For an example of feature extraction check
 
     python -m lola.extractor

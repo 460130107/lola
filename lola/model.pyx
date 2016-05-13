@@ -1,4 +1,5 @@
 import numpy as np
+cimport cython
 
 
 cdef class SufficientStatistics:
@@ -9,7 +10,7 @@ cdef class SufficientStatistics:
     This object also knows how to construct a new model based on up-to-date statistics.
     """
 
-    cpdef observation(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
+    cpdef void observation(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
         """
         Account for a potential observation.
 
@@ -21,19 +22,21 @@ cdef class SufficientStatistics:
         """
         pass
 
+    cpdef list components(self):
+        pass
 
-cdef class ExpectedCounts(SufficientStatistics):
+
+cdef class DefaultSufficientStatics(SufficientStatistics):
     """
-    This is used to gather sufficient statistics under a certain model.
-    The typical use is to accumulated expected counts from (potential) observations.
-
-    This object also knows how to construct a new model based on up-to-date statistics.
+    A default implementation of sufficient statistics.
+    Basically, this assumes a number of generative components
+    each of which is capable of counting partial observations.
     """
 
     def __init__(self, components):
         self._components = list(components)
 
-    cpdef observation(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
+    cpdef void observation(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
         """
         Account for a potential observation.
 
@@ -51,10 +54,25 @@ cdef class ExpectedCounts(SufficientStatistics):
         return self._components
 
 
-cdef class Model:
+cpdef save_model(GenerativeModel model, Corpus e_corpus, Corpus f_corpus, str path):
+    cdef GenerativeComponent comp
+    for comp in model.components():
+        comp.save(e_corpus, f_corpus, path)
+
+
+cdef class GenerativeModel:
     """
     A 0th-order alignment model, that is, alignment links are independent on one another.
     """
+
+    cpdef size_t n_components(self):
+        pass
+
+    cpdef GenerativeComponent component(self, size_t n):
+        pass
+
+    cpdef list components(self):
+        return []
 
     cpdef float likelihood(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
         """
@@ -99,9 +117,9 @@ cdef class Model:
         pass
 
 
-cdef class GenerativeModel(Model):
+cdef class DefaultModel(GenerativeModel):
     """
-    A 0th-order alignment model, that is, alignment links are independent on one another.
+    A default implementation of a 0th order alignment model made of a number of generative components.
     """
 
     def __init__(self, components):
@@ -113,8 +131,11 @@ cdef class GenerativeModel(Model):
     cpdef size_t n_components(self):
         return len(self._components)
 
-    cpdef GenerativeComponent component(self, int i):
-        return self._components[i]
+    cpdef list components(self):
+        return list(self._components)
+
+    cpdef GenerativeComponent component(self, size_t n):
+        return self._components[n]
 
     cpdef float likelihood(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
         """
@@ -157,7 +178,7 @@ cdef class GenerativeModel(Model):
         cdef GenerativeComponent comp
         for comp in self._components:
             components.append(comp.zeros())
-        return ExpectedCounts(components)
+        return DefaultSufficientStatics(components)
 
     cpdef update(self, list components):
         self._components = list(components)

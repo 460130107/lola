@@ -5,7 +5,7 @@ Auxiliary data structures for sparse representations.
 
 from libcpp.utility cimport pair as cpppair
 from cython.operator cimport dereference as deref, preincrement as inc
-
+cimport cython
 
 
 cdef class SparseCategorical:
@@ -36,7 +36,7 @@ cdef class SparseCategorical:
         """How many elements have been mapped."""
         return self._data.size()
 
-    cpdef get(self, int key):
+    cpdef float get(self, int key):
         """
         Return the value associated with a key (this operation never changes the container).
         It is a logical error to get a value for a key which is not supposed to belong to the support.
@@ -51,7 +51,7 @@ cdef class SparseCategorical:
         else:
             return deref(it).second
 
-    cpdef scale(self, float scalar):
+    cpdef void scale(self, float scalar):
         """
         Scales all mapped elements as well as the base value.
         :param scalar: a real number (typically strictly positive)
@@ -68,10 +68,10 @@ cdef class SparseCategorical:
         :return: total mass
         """
         cdef float total = 0.0
-        cdef int k
-        cdef float v
-        for k, v in self._data:
-            total += v
+        cdef cppmap[int, float].iterator it = self._data.begin()
+        while it != self._data.end():
+            total += deref(it).second
+            inc(it)
         return total + (self._support_size - self._data.size()) * self._base_value
 
     cpdef float plus_equals(self, int key, float value):
@@ -81,11 +81,12 @@ cdef class SparseCategorical:
         :param value:
         :return: categorical(key)
         """
-        cdef cpppair[cppmap[int, float].iterator, bint] result = self._data.insert((key, self._base_value + value))
+        cdef cpppair[cppmap[int, float].iterator, bint] result = self._data.insert(cpppair[int, float](key, self._base_value + value))
         if not result.second:
             deref(result.first).second = deref(result.first).second + value
         return deref(result.first).second
 
+    @cython.cdivision(True)
     cpdef float normalise(self):
         """
         Normalise the elements of the distribution including the base value.
@@ -101,3 +102,88 @@ cdef class SparseCategorical:
     def __str__(self):
         cdef str mapped = ' '.join(['{0}:{1}'.format(k,v) for k, v in sorted(dict(self._data).items(), key=lambda pair: pair[0])])
         return 'support=%d base-value=%d mapped=(%s)' % (self._support_size, self._base_value, mapped)
+
+    def iternonzero(self):
+        return dict(self._data).items()
+
+
+
+cdef class CPDTable:
+    """
+    Organises a fixed number of CPDs,
+    each represented as a sparse map of a fixed support size and a base value.
+    """
+
+    def __init__(self, size_t n_cpds, size_t support_size, float base_value):
+        """
+        :param n_cpds: number of CPDs
+        :param support_size: support size of each CPD
+        :param base_value: base value (common to all elements in all CPDs)
+        """
+        self._cpds.resize(n_cpds)
+        self._support_size = support_size
+        self._base_values.resize(n_cpds, base_value)
+
+    def __len__(self):
+        return self._cpds.size()
+
+    cpdef float get(self, size_t x, int y):
+        """
+        Parameter associated with the yth element of the xth CPD.
+        """
+        cdef cppvector[cppmap[int, float]].iterator cpd_it = self._cpds.begin() + x
+        cdef cppmap[int, float].iterator it = deref(cpd_it).find(y)
+        if it == deref(cpd_it).end():
+            return self._base_values[x]
+        else:
+            return deref(it).second
+
+    cpdef void scale(self, size_t x, float scalar):
+        """
+        Scale the xth CPD.
+        """
+        cdef cppvector[cppmap[int, float]].iterator cpd_it = self._cpds.begin() + x
+        cdef cppmap[int, float].iterator it = deref(cpd_it).begin()
+        while it != deref(cpd_it).end():
+            deref(it).second = deref(it).second * scalar
+            inc(it)
+        self._base_values[x] *= scalar
+
+    cpdef float sum(self, size_t x):
+        """
+        Return the sum of values (for mapped and unmapped elements) of the xth CPD.
+        """
+        cdef cppvector[cppmap[int, float]].iterator cpd_it = self._cpds.begin() + x
+        cdef float total = 0.0
+        cdef cppmap[int, float].iterator it = deref(cpd_it).begin()
+        while it != deref(cpd_it).end():
+            total += deref(it).second
+            inc(it)
+        return total + (self._support_size - deref(cpd_it).size()) * self._base_values[x]
+
+    cpdef float plus_equals(self, size_t x, int y, float value):
+        """
+        Adds to the underlying value of the yth element of the xth CPD.
+        """
+        cdef cppvector[cppmap[int, float]].iterator cpd_it = self._cpds.begin() + x
+        cdef cpppair[cppmap[int, float].iterator, bint] result = deref(cpd_it).insert(cpppair[int, float](y, self._base_values[x] + value))
+        if not result.second:
+            deref(result.first).second = deref(result.first).second + value
+        return deref(result.first).second
+
+    @cython.cdivision(True)
+    cpdef void normalise(self):
+        """
+        Normalise each CPD independently.
+        This checks for 0 mass and skips normalisation in such cases.
+        """
+        cdef size_t x
+        cdef float Z
+        for x in range(self._cpds.size()):
+            Z = self.sum(x)
+            if Z != 0.0:
+                self.scale(x, 1.0 / Z)
+
+    def iternonzero(self, size_t x):
+        cdef cppvector[cppmap[int, float]].iterator cpd_it = self._cpds.begin() + x
+        return dict(deref(cpd_it)).items()

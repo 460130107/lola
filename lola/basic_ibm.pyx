@@ -1,9 +1,9 @@
-from lola.model cimport GenerativeModel, SufficientStatistics, ExpectedCounts
-from lola.component cimport GenerativeComponent, LexicalParameters, UniformAlignment, JumpParameters
+from lola.model cimport DefaultModel
+from lola.component cimport LexicalParameters, UniformAlignment, JumpParameters
 from lola.component cimport BrownDistortionParameters
 
 
-cdef class IBM1(GenerativeModel):
+cdef class IBM1(DefaultModel):
     """
     An IBM1 is a 0th-order model with lexical parameters only.
     """
@@ -15,7 +15,7 @@ cdef class IBM1(GenerativeModel):
         return <LexicalParameters>self.component(0)
 
 
-cdef class BrownIBM2(GenerativeModel):
+cdef class BrownIBM2(DefaultModel):
     """
     An IBM1 is a 0th-order model with lexical parameters only.
     """
@@ -35,7 +35,7 @@ cdef class BrownIBM2(GenerativeModel):
         return <BrownDistortionParameters>self.component(1)
 
 
-cdef class VogelIBM2(GenerativeModel):
+cdef class VogelIBM2(DefaultModel):
     """
     An IBM1 is a 0th-order model with lexical parameters only.
     """

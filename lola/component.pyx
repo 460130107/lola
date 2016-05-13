@@ -1,9 +1,11 @@
 """
 Generative components for alignment models.
 """
+
 import numpy as np
 cimport numpy as np
-
+cimport cython
+from libc cimport math as c_math
 
 cdef class GenerativeComponent:
 
@@ -26,6 +28,12 @@ cdef class GenerativeComponent:
         """
         pass
 
+    cpdef save(self, Corpus e_corpus, Corpus f_corpus, str path):
+        pass
+
+
+cdef float cmp_prob(tuple pair):
+    return -pair[1]
 
 cdef class LexicalParameters(GenerativeComponent):
     """
@@ -34,61 +42,68 @@ cdef class LexicalParameters(GenerativeComponent):
         * each distribution defined over the French vocabulary
     """
 
-    def __init__(self, int e_vocab_size, int f_vocab_size, float p=0.0):
+    def __init__(self, size_t e_vocab_size, size_t f_vocab_size, float p=0.0):
         """
 
         :param e_vocab_size: size of English vocabulary (number of categorical distributions)
         :param f_vocab_size: size of French vocabulary (support of each categorical distribution)
         :param p: initial value (e.g. use 1.0/f_vocab_size to get uniform distributions)
         """
-        self._cpds = [SparseCategorical(f_vocab_size, p) for _ in range(e_vocab_size)]
-
-    def __str__(self):
-        cdef int i
-        cdef list lines = []
-        cdef SparseCategorical cpd
-        for i, cpd in enumerate(self._cpds):
-            lines.append('%d: %s' % (i, str(cpd)))
-        return '\n'.join(lines)
+        self._e_vocab_size = e_vocab_size
+        self._f_vocab_size = f_vocab_size
+        self._cpds = CPDTable(e_vocab_size, f_vocab_size, p)
 
     cpdef size_t e_vocab_size(self):
-        return len(self._cpds)
+        return self._e_vocab_size
 
     cpdef size_t f_vocab_size(self):
-        return self._cpds[0].support_size() if len(self._cpds) else 0
+        return self._f_vocab_size
 
-    cpdef SparseCategorical row(self, int e):
-        """Return the categorical associated with the conditioning context e."""
-        return self._cpds[e]
-
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
     cpdef float get(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
         """Get the parameter value associated with cat(f|e)."""
-        return self._cpds[e_snt[i]].get(f_snt[j])
+        return self._cpds.get(e_snt[i], f_snt[j])
 
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
     cpdef float plus_equals(self,  np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
         """Adds to the parameter value associated with cat(f|e)."""
-        return self._cpds[e_snt[i]].plus_equals(f_snt[j], p)
+        return self._cpds.plus_equals(e_snt[i], f_snt[j], p)
 
     cpdef normalise(self):
         """Normalise each distribution by its total mass."""
-        cdef SparseCategorical cpd
-        for cpd in self._cpds:
-            cpd.normalise()
+        self._cpds.normalise()
 
     cpdef GenerativeComponent zeros(self):
-        return LexicalParameters(self.e_vocab_size(), self.f_vocab_size(), 0.0)
+        return LexicalParameters(self._e_vocab_size, self._f_vocab_size, 0.0)
+
+    cpdef save(self, Corpus e_corpus, Corpus f_corpus, str path):
+        cdef size_t e
+        cdef size_t f
+        cdef float p
+        cdef tuple pair
+        with open('{0}.lex'.format(path), 'w') as fo:
+            for e in range(self._e_vocab_size):
+                for f, p in sorted(self._cpds.iternonzero(e), key=cmp_prob):
+                    print('{0} {1} {2}'.format(e_corpus.translate(e), f_corpus.translate(f), p), file=fo)
 
 
-cdef class UniformAlignment(GenerativeComponent):
+cdef class DistortionParameters(GenerativeComponent):
+
+    pass
+
+cdef class UniformAlignment(DistortionParameters):
 
     def __init__(self):
         pass
 
+    @cython.cdivision(True)
     cpdef float get(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
         """
         Parameter associated with a certain jump.
         """
-        return 1.0 / len(e_snt)
+        return 1.0 / e_snt.shape[0]
 
     cpdef float plus_equals(self,  np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
         return p
@@ -97,10 +112,10 @@ cdef class UniformAlignment(GenerativeComponent):
         pass
 
     cpdef GenerativeComponent zeros(self):
-        return UniformAlignment()
+        return self
 
 
-cdef class JumpParameters(GenerativeComponent):
+cdef class JumpParameters(DistortionParameters):
     """
     Vogel's style distortion (jump) parameters for IBM2.
     """
@@ -116,7 +131,8 @@ cdef class JumpParameters(GenerativeComponent):
                                                                   self._max_french_len,
                                                                   self._categorical)
 
-    cpdef int jump(self, int l, int m, int i, int j):
+    @cython.cdivision(True)
+    cdef int jump(self, int l, int m, int i, int j):
         """
         Return the relative jump.
 
@@ -126,7 +142,7 @@ cdef class JumpParameters(GenerativeComponent):
         :param j: 0-based French word position
         :return: i - floor((j + 1) * l / m)
         """
-        return i - np.floor((j + 1) * l / m)
+        return i - <int>c_math.floor((j + 1) * l / m)
 
     cpdef int max_english_len(self):
         return self._max_english_len
@@ -139,14 +155,14 @@ cdef class JumpParameters(GenerativeComponent):
         Parameter associated with a certain jump.
         """
         # compute the jump
-        cdef int jump = self.jump(len(e_snt), len(f_snt), i, j)
+        cdef int jump = self.jump(e_snt.shape[0], f_snt.shape[0], i, j)
         # retrieve the parameter associated with it
         # or a base value in case the jump is not yet mapped
         return self._categorical.get(jump)
 
     cpdef float plus_equals(self,  np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
         # compute the jump
-        cdef int jump = self.jump(len(e_snt), len(f_snt), i, j)
+        cdef int jump = self.jump(e_snt.shape[0], f_snt.shape[0], i, j)
         # accumulate fractional count
         return self._categorical.plus_equals(jump, p)
 
@@ -157,8 +173,17 @@ cdef class JumpParameters(GenerativeComponent):
     cpdef GenerativeComponent zeros(self):
         return JumpParameters(self.max_english_len(), self.max_french_len(), 0.0)
 
+    cpdef save(self, Corpus e_corpus, Corpus f_corpus, str path):
+        cdef size_t e
+        cdef size_t f
+        cdef float p
+        cdef tuple pair
+        with open('{0}.jump'.format(path), 'w') as fo:
+            for jump, p in sorted(self._categorical.iternonzero(), key=cmp_prob):
+                print('{0} {1}'.format(jump, p), file=fo)
 
-cdef class BrownDistortionParameters(GenerativeComponent):
+
+cdef class BrownDistortionParameters(DistortionParameters):
 
     def __init__(self, int max_english_len, float base_value):
         self._max_english_len = max_english_len
@@ -175,7 +200,7 @@ cdef class BrownDistortionParameters(GenerativeComponent):
         """
         Parameter associated with a certain jump.
         """
-        cdef tuple key = (len(e_snt), len(f_snt), j)
+        cdef tuple key = (e_snt.shape[0], f_snt.shape[0], j)
         cdef SparseCategorical cpd
         if key not in self._cpds:
             cpd = SparseCategorical(self._max_english_len, self._base_value)
@@ -185,7 +210,7 @@ cdef class BrownDistortionParameters(GenerativeComponent):
         return cpd.get(i)
 
     cpdef float plus_equals(self,  np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
-        cdef tuple key = (len(e_snt), len(f_snt), j)
+        cdef tuple key = (e_snt.shape[0], f_snt.shape[0], j)
         cdef SparseCategorical cpd
         if key not in self._cpds:
             cpd = SparseCategorical(self._max_english_len, self._base_value)

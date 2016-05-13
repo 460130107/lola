@@ -1,6 +1,15 @@
 """
 This is a cython implementation of zeroth-order HMM alignment models (e.g. IBM1 and IBM2).
 
+
+Not using these macros for now:
+
+# cython: boundscheck=False
+# cython: wraparound=False
+# cython: cdivision=True
+# cython: nonecheck=False
+
+
 :Authors: - Wilker Aziz
 """
 
@@ -16,26 +25,29 @@ cimport numpy as np
 cimport cython
 import sys
 import logging
+cimport libc.math as c_math
 
 from lola.corpus cimport Corpus
 from lola.component cimport GenerativeComponent
-from lola.model cimport GenerativeModel, SufficientStatistics, ExpectedCounts
+from lola.model cimport GenerativeModel, SufficientStatistics
 
 
-cpdef float viterbi_alignments(Corpus e_corpus, Corpus f_corpus, GenerativeModel model, ostream=sys.stdout):
+cpdef float viterbi_alignments(Corpus e_corpus, Corpus f_corpus, GenerativeModel model, callback):
     """
     This writes Viterbi alignments to an output stream.
 
     :param e_corpus:
     :param f_corpus:
     :param lex_parameters:
-    :param ostream: output stream
+    :param callback: a function to deal with the Viterbi decisions (called for one sentence pair at a time)
+        callback(0-based sentence id, alignments, posterior probabilities)
     """
     cdef:
         size_t S = f_corpus.n_sentences()
         size_t s
         np.int_t[::1] f_snt, e_snt
-        np.int_t[::1] alignment
+        np.int_t[::1] alignment = np.zeros(f_corpus.max_len(), dtype=np.int)
+        np.float_t[::1] posterior = np.zeros(f_corpus.max_len(), dtype=np.float)
         size_t i, j, best_i
         int f, e
         float p, best_p
@@ -43,20 +55,24 @@ cpdef float viterbi_alignments(Corpus e_corpus, Corpus f_corpus, GenerativeModel
     for s in range(S):
         f_snt = f_corpus.sentence(s)
         e_snt = e_corpus.sentence(s)
-        alignment = np.zeros(len(f_snt), dtype=np.int)
-        for j in range(len(f_snt)):
+        m = f_snt.shape[0]
+        l = e_snt.shape[0]
+        for j in range(m):
             best_i = 0
             best_p = 0
-            for i in range(len(e_snt)):
+            Z = 0
+            for i in range(l):
                 p = model.posterior(e_snt, f_snt, i, j)
+                Z += p
                 # introduced a deterministic tie-break heuristic that dislikes null-alignments
                 if p > best_p:
                     best_p = p
                     best_i = i
             alignment[j] = best_i
+            posterior[j] = best_p if Z == 0 else best_p / Z
         # in printing we make the French sentence 1-based by convention
         # we keep the English sentence 0-based because of the NULL token
-        print(' '.join(['{0}-{1}'.format(i, j + 1) for j, i in enumerate(alignment)]), file=ostream)
+        callback(s, alignment[0:m], posterior[0:m])
 
 
 cpdef float loglikelihood(Corpus e_corpus, Corpus f_corpus, GenerativeModel model):
@@ -79,11 +95,11 @@ cpdef float loglikelihood(Corpus e_corpus, Corpus f_corpus, GenerativeModel mode
     for s in range(S):
         f_snt = f_corpus.sentence(s)
         e_snt = e_corpus.sentence(s)
-        for j in range(len(f_snt)):
+        for j in range(f_snt.shape[0]):
             p = 0.0
-            for i in range(len(e_snt)):
+            for i in range(e_snt.shape[0]):
                 p += model.likelihood(e_snt, f_snt, i, j)
-            loglikelihood += np.log(p)
+            loglikelihood += c_math.log(p)
 
     return loglikelihood
 
@@ -112,17 +128,17 @@ cpdef float empirical_cross_entropy(Corpus e_corpus, Corpus f_corpus, Generative
         float p
 
     for s in range(S):
-        f_snt = f_corpus.sentence(s)
         e_snt = e_corpus.sentence(s)
+        f_snt = f_corpus.sentence(s)
         log_p_s = 0.0
-        for j in range(len(f_snt)):
+        for j in range(f_snt.shape[0]):
             p = 0.0
-            for i in range(len(e_snt)):
+            for i in range(e_snt.shape[0]):
                 p += model.likelihood(e_snt, f_snt, i, j)
             if p == 0:  # entropy is typically computed for test sets as well, where some words can be unknown
                 log_p_s += log_zero
             else:
-                log_p_s += np.log(p)
+                log_p_s += c_math.log(p)
         entropy += log_p_s
 
     return - entropy / S
@@ -154,7 +170,12 @@ cpdef tuple EM(Corpus e_corpus, Corpus f_corpus, int iterations, GenerativeModel
     return model, entropy_log
 
 
-cdef ExpectedCounts e_step(Corpus e_corpus, Corpus f_corpus, GenerativeModel model):
+@cython.nonecheck(False)
+@cython.wraparound(False)
+@cython.boundscheck(False)
+@cython.cdivision(True)
+@cython.initializedcheck(False)
+cdef SufficientStatistics e_step(Corpus e_corpus, Corpus f_corpus, GenerativeModel model):
     """
     The E-step gathers expected/potential counts for different types of events updating
     the sufficient statistics.
@@ -168,14 +189,16 @@ cdef ExpectedCounts e_step(Corpus e_corpus, Corpus f_corpus, GenerativeModel mod
     :param suffstats: a sufficient statistics object compatible with the model
     """
 
-    cdef ExpectedCounts suffstats = <ExpectedCounts> model.suffstats()
+    cdef SufficientStatistics suffstats = model.suffstats()
     cdef size_t S = f_corpus.n_sentences()
     cdef np.int_t[::1] f_snt, e_snt
-    cdef np.float_t[::1] posterior_aj
+    cdef np.float_t[::1] posterior_aj = np.zeros(f_corpus.max_len())
     cdef size_t s, i, j
     cdef int f, e
+    cdef float Z, p
 
     for s in range(S):
+
         f_snt = f_corpus.sentence(s)
         e_snt = e_corpus.sentence(s)
 
@@ -198,33 +221,30 @@ cdef ExpectedCounts e_step(Corpus e_corpus, Corpus f_corpus, GenerativeModel mod
         # For a given French position j, I am choosing to represent it by a vector indexed by English positions
         # Thus a cell posterior_aj[i] is associated with P(a_j=i|e_0^l,f_1^m)
 
-        for j in range(len(f_snt)):
+        for j in range(f_snt.shape[0]):
             f = f_snt[j]
-            posterior_aj = np.zeros(len(e_snt))
+            #posterior_aj = np.zeros(len(e_snt))
 
             # To compute the probability of each outcome of a_j
             # we start by evaluating the numerator of P(a_j=i|e_0^l,f_1^m) for every possible i
-            for i in range(len(e_snt)):
-                e = e_snt[i]
+            Z = 0.0
+            for i in range(e_snt.shape[0]):
                 # if this was IBM 2, we would also have the contribution of a distortion parameter
-                posterior_aj[i] = model.posterior(e_snt, f_snt, i, j)
-            # Then we normalise it making a proper cpd
-            posterior_aj /= np.sum(posterior_aj)
+                p = model.posterior(e_snt, f_snt, i, j)
+                posterior_aj[i] = p
+                Z += p
 
             # Once the (normalised) posterior probability of each outcome has been computed
             #  we can easily gather partial counts
-            for i in range(len(e_snt)):
-                #e = e_snt[i]
-                #lex_counts.plus_equals(e, f, posterior_aj[i])
-                suffstats.observation(e_snt, f_snt, i, j, posterior_aj[i])
-                # if this was IBM2, we would also accumulate dist_counts.plus_equals(i, j, posterior_aj[i])
+            for i in range(e_snt.shape[0]):
+                suffstats.observation(e_snt, f_snt, i, j, posterior_aj[i]/Z)
 
         #if (s + 1) % 10000 == 0:
         #    logging.debug('E-step %d/%d sentences', s + 1, S)
     return suffstats
 
 
-cpdef m_step(GenerativeModel model, ExpectedCounts suffstats):
+cpdef m_step(GenerativeModel model, SufficientStatistics suffstats):
     """
     The M-step normalises the sufficient statistics for each event type and construct a new model.
     """

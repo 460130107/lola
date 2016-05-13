@@ -17,6 +17,7 @@ ext_modules = cythonize('**/*.pyx',
                         language='c++',
                         exclude=['lola/ibm2.pyx'],
                         language_level=3,
+                        annotate=True,
                         )
 
 setup(
