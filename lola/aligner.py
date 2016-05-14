@@ -32,10 +32,10 @@ def argparser():
                         help='English corpus (the data we condition on)')
     parser.add_argument('--test-f', metavar='FILE',
                         type=str,
-                        help='A French test corpus (the date we generate)')
+                        help='A French test corpus (the data we generate)')
     parser.add_argument('--test-e', metavar='FILE',
                         type=str,
-                        help='An English test corpus (the date we condition on)')
+                        help='An English test corpus (the data we condition on)')
     parser.add_argument('--merge', action='store_true', default=False,
                         help='Merge training and test set for training')
     parser.add_argument('--distortion-type', choices=['Vogel', 'Brown'],
