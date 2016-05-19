@@ -239,6 +239,22 @@ class WordOperationFeatures(FeatureExtractor):
         return features
 
 
+class LexExampleFeatures(FeatureExtractor):
+    """
+    Example class using the word itself as feature only (in both English as French)
+    """
+    def __init__(self, e_corpus, f_corpus):
+        self._e_corpus = e_corpus
+        self._f_corpus = f_corpus
+
+    def extract(self, e_snt, f_snt, i, j):
+        features = list()
+
+        features.append('e[i]=%s' % self._e_corpus.translate(e_snt[i]))
+        features.append('f[i]=%s' % self._f_corpus.translate(f_snt[j]))
+
+        return features
+
 if __name__ == '__main__':
 
     F = Corpus('training/example.f')
