@@ -1,6 +1,8 @@
 import scipy.sparse as sparse
+import numpy as np
 from lola.extractor import LexExampleFeatures
 from lola.corpus import Corpus
+from collections import defaultdict
 
 
 class FeatureMatrix:
@@ -8,7 +10,7 @@ class FeatureMatrix:
     An initialized feature matrix, on which can be queried.
     """
 
-    def __init__(self, e_corpus, f_corpus, features, number_of_features):
+    def __init__(self, e_corpus, f_corpus, features):
         """
         Initializes a feature matrix class
         :param e_corpus: an instance of Corpus (with NULL tokens)
@@ -18,126 +20,80 @@ class FeatureMatrix:
         """
         e_vocab_size = e_corpus.vocab_size()
         f_vocab_size = f_corpus.vocab_size()
-        self._max_word_pairs = e_vocab_size * f_vocab_size
-        self._max_d = number_of_features
-        self._feature_vector = sparse.dok_matrix((self._max_word_pairs, self._max_d), dtype=bool)
-        self._word_pair_dict = {}
         self._feature_dict = {}
-        self.init_feature_vector(e_corpus, f_corpus, features)
+        self._feature_vector = self.init_feature_vector(e_corpus, f_corpus, features)
 
-    def init_feature_vector(self, e_corpus, f_corpus, features):
+    def init_feature_vector(self, e_corpus, f_corpus, extractor):
         """
         Initializes the feature matrix itself with the following parameters
         :param e_corpus: an instance of Corpus (with NULL tokens)
         :param f_corpus: an instance of Corpus (without NULL tokens)
-        :param features: a feature class that inherits the FeatureExtractor
+        :param extractor: a feature class that inherits the FeatureExtractor
         :return: a sparse dok_matrix with word pairs x features
         """
 
         # set the indices for the dok_matrix
-        word_pair_index = 0
-        feature_index = 0
+        word_pair_features = [defaultdict(list) for _ in range(f_corpus.vocab_size())]
 
         # loop over all sentences in the corpus
         for s, (f_snt, e_snt) in enumerate(zip(f_corpus.itersentences(), e_corpus.itersentences()), 1):
 
             # loop over all words pairs in the sentence pairs
             for j in range(len(f_snt)):
+                f_features = word_pair_features[f_snt[j]]
+
                 for i in range(len(e_snt)):
+                    e_features = f_features[e_snt[i]]
 
-                    # add word pair, if not seen before, to dictionary
-                    if (f_snt[j], e_snt[i]) not in self._word_pair_dict:
-                        self._word_pair_dict[(f_snt[j], e_snt[i])] = word_pair_index
-                        word_pair_index += 1
+                    if len(e_features) != 0:
+                        continue  # we have nothing to do in this case, because this word pair has already been seen
+                    for feature in extractor.extract(e_snt, f_snt, i, j):
+                        f_id = self._feature_dict.get(feature, None)  # try to get the feature id
+                        if f_id is None:  # if there isn't
+                            f_id = len(self._feature_dict)  # we get the next available id (starting from 0)
+                            self._feature_dict[feature] = f_id
 
-                    # extract all features and loop over them
-                    features_list = features.extract(e_snt, f_snt, i, j)
-                    for feature in features_list:
+                        e_features.append(f_id)
 
-                        # add feature, if not seen before, to dictionary
-                        if feature not in self._feature_dict.keys():
-                            self._feature_dict[feature] = feature_index
-                            feature_index += 1
+        r = e_corpus.vocab_size()  # max rows
+        d = len(self._feature_dict)  # max columns
+        # now we can construct dok_matrix objects
+        # for each F word we have one dok_matrix
+        for f in range(f_corpus.vocab_size()):
+            word_pair_features[f] = self.convert_to_dok(word_pair_features[f], max_rows=r, max_columns=d)
+        # when we get here, we will have converted all (python) dictionary of features to (scipy) dok_matrix objects
+        # now we just convert this big list to a numpy army
+        return np.array(word_pair_features)
 
-                        # as all features in the feature list belong to the current word pair,
-                        # set matrix position of word pair with feature to true
-                        self.update_matrix(e_snt[i], f_snt[j], feature, True)
+    @staticmethod
+    def convert_to_dok(feature_dict, max_rows, max_columns):
+        matrix = sparse.dok_matrix((max_rows, max_columns), dtype=bool)
+        for row, columns in feature_dict.items():
+            for column in columns:
+                matrix[row, column] = True
+        return matrix
 
-        return
-
-    def update_matrix(self, e_word, f_word, feature, value):
-        """
-        Update the position in the feature matrix
-        :param e_word: an integer representing an English word
-        :param f_word: an integer representing a French word
-        :param feature: a feature, represented by a string
-        :param value: value with which the feature matrix should be updated
-        :return:
-        """
-        word_pair_index = self.get_word_pair_index(f_word, e_word)
-        feature_index = self.get_feature_index(feature)
-        self._feature_vector[word_pair_index, feature_index] = value
-
-    def max_word_pair_size(self):
-        """
-
-        :return: total amount of possible word-pairs (note, not actual amount of word pairs)
-        """
-        return self._max_word_pairs
-
-    def max_feature_size(self):
-        """
-
-        :return: total amount of possible features (note, not actual amount of features)
-        """
-        return self._max_d
-
-    def word_pair_size(self):
-        """
-
-        :return: amount of word pairs in the feature matrix
-        """
-        return len(self._word_pair_dict)
-
-    def feature_size(self):
-        """
-
-        :return: amount of features in the feature matrix
-        """
-        return len(self._feature_dict)
-
-    def get_feature_vector(self, f_word, e_word):
+    def get_feature_vector(self, f, e):
         """
         returns a feature vector of a word pair
         note that this function does not check on existence of word pair
-        :param e_word: an integer representing an English word
-        :param f_word: an integer representing a French word
+        :param f: an integer representing a French word
+        :param e: an integer representing an English word
         :return: feature vector of a word pair
         """
-        word_pair_index = self.get_word_pair_index(f_word, e_word)
-        return self._feature_vector[word_pair_index, :].todense()
+        return self._feature_vector[f][e, :]
 
-    def get_feature_value(self, f_word, e_word, feature):
+    def get_feature_value(self, f, e, feature):
         """
         returns a feature value for a word pair and a feature
         note that this function does not check on existence of word pair
-        :param e_word: an integer representing an English word
-        :param f_word: an integer representing a French word
+        :param f: an integer representing a French word
+        :param e: an integer representing an English word
         :param feature: a feature, represented by a string
         :return: a bool with the value of the indexed word pair and feature
         """
-        word_pair_index = self.get_word_pair_index(f_word, e_word)
         feature_index = self.get_feature_index(feature)
-        return self._feature_vector[word_pair_index, feature_index]
-
-    def get_word_pair_index(self, f_word, e_word):
-        """
-        returns the index of the word pair in the feature matrix
-        :param e_word: an integer representing an English word
-        :param f_word: an integer representing a French word
-        :return: an integer representing the word pair in the feature matrix
-        """
-        return self._word_pair_dict[(f_word, e_word)]
+        return self._feature_vector[f][e, feature_index]
 
     def get_feature_index(self, feature):
         """
@@ -154,5 +110,5 @@ if __name__ == '__main__':
 
     lexFeatures = LexExampleFeatures(E, F)
 
-    f = FeatureMatrix(E, F, lexFeatures, E.vocab_size() + F.vocab_size())
-    print(f._feature_vector.todense())
+    f = FeatureMatrix(E, F, lexFeatures)
+    print(f._feature_vector[0].todense())
