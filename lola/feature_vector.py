@@ -67,6 +67,13 @@ class FeatureMatrix:
 
     @staticmethod
     def convert_to_dok(feature_dict, max_rows, max_columns):
+        """
+
+        :param feature_dict: dictionary with English words as key and the feature (integer) as value
+        :param max_rows: amount of rows
+        :param max_columns: amount of columns
+        :return: dok_matrix with boolean values
+        """
         matrix = sparse.dok_matrix((max_rows, max_columns), dtype=bool)
         for row, columns in feature_dict.items():
             for column in columns:
