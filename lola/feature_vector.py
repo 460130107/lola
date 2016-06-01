@@ -18,8 +18,8 @@ class FeatureMatrix:
         :param features: a feature class that inherits the FeatureExtractor
         :param number_of_features: number of unique features
         """
-        e_vocab_size = e_corpus.vocab_size()
-        f_vocab_size = f_corpus.vocab_size()
+        self.e_vocab_size = e_corpus.vocab_size()
+        self.f_vocab_size = f_corpus.vocab_size()
         self._feature_dict = {}
         self._feature_vector = self.init_feature_vector(e_corpus, f_corpus, features)
 
@@ -109,6 +109,9 @@ class FeatureMatrix:
         :return: an integer representing the feature in the feature matrix
         """
         return self._feature_dict[feature]
+
+    def get_feature_size(self):
+        return len(self._feature_dict)
 
 if __name__ == '__main__':
 
