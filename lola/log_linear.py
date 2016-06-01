@@ -6,7 +6,7 @@ import collections
 
 
 
-class LogLinearParameters(GenerativeComponent): #Component
+class LogLinearComponent: #Component
 
     def __init__(self, e_corpus, f_corpus, weight_vector, feature_matrix, p):
         self._weight_vector = weight_vector # np.array of w's
