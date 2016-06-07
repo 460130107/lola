@@ -1,12 +1,11 @@
 from lola.component import GenerativeComponent
 import lola.sparse as sparse
 import numpy as np
-from numpy import linalg as la
 import collections
 
 
 
-class LogLinearComponent: #Component
+class LogLinearParameters(GenerativeComponent): #Component
 
     def __init__(self, e_corpus, f_corpus, weight_vector, feature_matrix, p):
         self._weight_vector = weight_vector # np.array of w's
@@ -140,6 +139,7 @@ class LogLinearComponent: #Component
         """
         expected_feature_vectors = self.calculate_expected_feature_vectors()
         expected_log_likelihood, gradient = self.likelihood_gradient(expected_feature_vectors)
+        # lbfgs step
         return expected_log_likelihood, gradient
 
     def calculate_expected_feature_vectors(self):
@@ -176,6 +176,7 @@ class LogLinearComponent: #Component
                 theta = self.calculate_theta(e, f) # theta_c,d(w) for each w (thus theta is a vector w's)
                 feature_vector = self._feature_matrix.get_feature_vector(f, e)
                 gradient += expected_counts * (feature_vector - expected_feature_vector)
+                # add regularizer
                 expected_log_likelihood += expected_counts * np.log(theta)
         return expected_log_likelihood, gradient
 
@@ -186,6 +187,7 @@ class LogLinearComponent: #Component
         return LogLinearParameters(self.e_vocab_size(), self.f_vocab_size(), 0.0)
 
 
-
+    def save(self, e_corpus, f_corpus, path):
+        pass
 
 
