@@ -1,6 +1,6 @@
 import scipy.sparse as sparse
 import numpy as np
-from lola.extractor import LexExampleFeatures
+from lola.extractor import LexFeatures
 from lola.corpus import Corpus
 from collections import defaultdict
 
@@ -121,7 +121,7 @@ if __name__ == '__main__':
     F = Corpus('training/example.f')
     E = Corpus('training/example.e', null='<NULL>')
 
-    lexFeatures = LexExampleFeatures(E, F)
+    lexFeatures = LexFeatures(E, F)
 
     f = FeatureMatrix(E, F, lexFeatures)
     print(f._feature_vector[0].todense())
