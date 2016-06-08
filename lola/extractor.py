@@ -239,7 +239,7 @@ class WordOperationFeatures(FeatureExtractor):
         return features
 
 
-class LexExampleFeatures(FeatureExtractor):
+class LexFeatures(FeatureExtractor):
     """
     Example class using the word itself as feature only (in both English as French)
     """
@@ -253,6 +253,50 @@ class LexExampleFeatures(FeatureExtractor):
         features.append('e[i]=%s' % self._e_corpus.translate(e_snt[i]))
         features.append('f[i]=%s' % self._f_corpus.translate(f_snt[j]))
 
+        # FRENCH SUFFIX
+        features.append('f[j][-2:]=%s' % self._f_corpus.translate(f_snt[j])[-2:])
+        features.append('f[j][-3:]=%s' % self._f_corpus.translate(f_snt[j])[-3:])
+        features.append('f[j][-4:]=%s' % self._f_corpus.translate(f_snt[j])[-4:])
+
+        # FRENCH PREFIX
+        features.append('f[j][:2]=%s' % self._f_corpus.translate(f_snt[j])[:2])
+        features.append('f[j][:3]=%s' % self._f_corpus.translate(f_snt[j])[:3])
+        features.append('f[j][:4]=%s' % self._f_corpus.translate(f_snt[j])[:4])
+
+        # ENGLISH SUFFIX
+        features.append('e[i][-2:]=%s' % self._e_corpus.translate(e_snt[i])[-2:])
+        features.append('e[i][-3:]=%s' % self._e_corpus.translate(e_snt[i])[-3:])
+        features.append('e[i][-4:]=%s' % self._e_corpus.translate(e_snt[i])[-4:])
+
+        # ENGLISH PREFIX
+        features.append('e[i][:2]=%s' % self._e_corpus.translate(e_snt[i])[:2])
+        features.append('e[i][:3]=%s' % self._e_corpus.translate(e_snt[i])[:3])
+        features.append('e[i][:4]=%s' % self._e_corpus.translate(e_snt[i])[:4])
+
+        # FRENCH WORD-SUFFIX
+        features.append('f[j][:-2]=%s' % self._f_corpus.translate(f_snt[j])[:-2])
+        features.append('f[j][:-3]=%s' % self._f_corpus.translate(f_snt[j])[:-3])
+        features.append('f[j][:-4]=%s' % self._f_corpus.translate(f_snt[j])[:-4])
+
+        # FRENCH WORD-PREFIX
+        features.append('f[j][2:]=%s' % self._f_corpus.translate(f_snt[j])[2:])
+        features.append('f[j][3:]=%s' % self._f_corpus.translate(f_snt[j])[3:])
+        features.append('f[j][4:]=%s' % self._f_corpus.translate(f_snt[j])[4:])
+
+        # ENGLISH WORD-SUFFIX
+        features.append('e[i][:-2]=%s' % self._e_corpus.translate(e_snt[i])[:-2])
+        features.append('e[i][:-3]=%s' % self._e_corpus.translate(e_snt[i])[:-3])
+        features.append('e[i][:-4]=%s' % self._e_corpus.translate(e_snt[i])[:-4])
+
+        # ENGLISH WORD-PREFIX
+        features.append('e[i][2:]=%s' % self._e_corpus.translate(e_snt[i])[2:])
+        features.append('e[i][3:]=%s' % self._e_corpus.translate(e_snt[i])[3:])
+        features.append('e[i][4:]=%s' % self._e_corpus.translate(e_snt[i])[4:])
+
+        # OTHER STRING OPERATIONS
+        digits = re.compile('\d')  # Check if french word contains one or more digits
+        features.append('French-contains-digits=%s' % bool(digits.search(self._f_corpus.translate(f_snt[j]))))
+        features.append('English-contains-digits=%s' % bool(digits.search(self._e_corpus.translate(e_snt[i]))))
         return features
 
 if __name__ == '__main__':

@@ -17,7 +17,7 @@ cdef class IBM1(DefaultModel):
 
 cdef class BrownIBM2(DefaultModel):
     """
-    An IBM1 is a 0th-order model with lexical parameters only.
+    An IBM2 is a 0th-order model with lexical parameters and the original distortion parameters.
     """
 
     def __init__(self, LexicalParameters lex_parameters, BrownDistortionParameters dist_parameters):
@@ -37,7 +37,7 @@ cdef class BrownIBM2(DefaultModel):
 
 cdef class VogelIBM2(DefaultModel):
     """
-    An IBM1 is a 0th-order model with lexical parameters only.
+    An IBM2 is a 0th-order model with lexical parameters and Vogel's distortion parameters.
     """
 
     def __init__(self, LexicalParameters lex_parameters, JumpParameters dist_parameters):

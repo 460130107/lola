@@ -21,7 +21,7 @@ class FeatureMatrix:
         self.e_vocab_size = e_corpus.vocab_size()
         self.f_vocab_size = f_corpus.vocab_size()
         self._feature_dict = {}
-        self._feature_vector = self.init_feature_vector(e_corpus, f_corpus, features)
+        self._feature_vector, self._max_rows, self._max_cols = self.init_feature_vector(e_corpus, f_corpus, features)
 
     def init_feature_vector(self, e_corpus, f_corpus, extractor):
         """
@@ -63,7 +63,10 @@ class FeatureMatrix:
             word_pair_features[f] = self.convert_to_dok(word_pair_features[f], max_rows=r, max_columns=d)
         # when we get here, we will have converted all (python) dictionary of features to (scipy) dok_matrix objects
         # now we just convert this big list to a numpy army
-        return np.array(word_pair_features)
+        return np.array(word_pair_features), r, d
+
+    def zero_vec(self):
+        return sparse.dok_matrix((1, self._max_cols))
 
     @staticmethod
     def convert_to_dok(feature_dict, max_rows, max_columns):

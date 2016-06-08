@@ -8,8 +8,14 @@ from lola.corpus import Corpus, CorpusView
 import lola.hmm0 as hmm0
 from lola.component import LexicalParameters, JumpParameters, BrownDistortionParameters
 from lola.fast_ibm import IBM1, VogelIBM2, BrownIBM2
+from lola.log_linear import LogLinearParameters, LogLinearIBM1, VogelLogLinearIBM2, BrownLogLinearIBM2
+from lola.feature_vector import FeatureMatrix
+from lola.extractor import LexFeatures
 from lola.model import save_model
 from functools import partial
+
+
+
 
 
 def argparser():
@@ -75,6 +81,16 @@ def cmd_estimation(group):
                        default=0,
                        metavar='INT',
                        help='Number of iterations of IBM model 2')
+    group.add_argument('--llibm1',
+                       type=int,
+                       default=5,
+                       metavar='INT',
+                       help='Number of iterations of log-linear IBM model 1')
+    group.add_argument('--llibm2',
+                       type=int,
+                       default=0,
+                       metavar='INT',
+                       help='Number of iterations of log-linear IBM model 2')
 
 
 def cmd_logging(group):
@@ -127,6 +143,7 @@ def get_corpora(training_path, test_path, generating):
 
 def print_lex_parameter(e, f, p, e_corpus, f_corpus, ostream):
     print('{0} {1} {2}'.format(e_corpus.translate(e), f_corpus.translate(f), p), file=ostream)
+
 
 def print_moses_format(s, alignments, posterior, skip_null, ostream):
     """
@@ -239,11 +256,53 @@ def get_ibm2(e_corpus, f_corpus, args):
         raise ValueError('I do not know this type of parameterisation: %s' % args.distortion_type)
 
 
+def get_ibm1_loglinear(e_corpus, f_corpus, args):
+    lex_features = LexFeatures(e_corpus, f_corpus)
+    feature_matrix = FeatureMatrix(e_corpus, f_corpus, lex_features)
+    feature_size = feature_matrix.get_feature_size()
+    weight_vector = np.full((1, feature_size), 1.0 / feature_size, dtype=np.float)
+    return LogLinearIBM1(LogLinearParameters(e_corpus.vocab_size(),
+                         f_corpus.vocab_size(),
+                         weight_vector,
+                         feature_matrix,
+                         p=0.0))
+
+
+def get_ibm2_loglinear(e_corpus, f_corpus, args):
+    lex_features = LexFeatures(e_corpus, f_corpus)
+    feature_matrix = FeatureMatrix(e_corpus, f_corpus, lex_features)
+    feature_size = feature_matrix.get_feature_size()
+    weight_vector = np.full((1, feature_size), 1.0 / feature_size, dtype=np.float)
+    if args.distortion_type == 'Vogel':
+        return VogelLogLinearIBM2(LogLinearParameters(e_corpus.vocab_size(),
+                                                      f_corpus.vocab_size(),
+                                                      weight_vector,
+                                                      feature_matrix,
+                                                      p=0.0),
+                                  JumpParameters(e_corpus.max_len(),
+                                                 f_corpus.max_len(),
+                                                 1.0 / (e_corpus.max_len() + f_corpus.max_len() + 1)))
+    elif args.distortion_type == 'Brown':
+        return BrownLogLinearIBM2(LogLinearParameters(e_corpus.vocab_size(),
+                                                      f_corpus.vocab_size(),
+                                                      weight_vector,
+                                                      feature_matrix,
+                                                      p=0.0),
+                                  BrownDistortionParameters(e_corpus.max_len(),
+                                                            1.0 / (e_corpus.max_len())))
+    else:
+        raise ValueError('I do not know this type of parameterisation: %s' % args.distortion_type)
+
+
 def initial_model(e_corpus, f_corpus, model_type, args, initialiser=None):
     if model_type == 'IBM1':
         model = get_ibm1(e_corpus, f_corpus, args)
     elif model_type == 'IBM2':
         model = get_ibm2(e_corpus, f_corpus, args)
+    elif model_type =='LL-IBM1':
+        model = get_ibm1_loglinear(e_corpus, f_corpus, args)
+    elif model_type == 'LL-IBM2':
+        model = get_ibm2_loglinear(e_corpus, f_corpus, args)
     else:
         raise ValueError('I do not know this type of model: %s' % model_type)
 
@@ -315,6 +374,30 @@ def pipeline(e_training, f_training, apply_to, args):
                                                args,
                                                initialiser)
         # TODO: save IBM2 entropies
+
+    if args.llibm1 > 0:
+        llibm1, llibm1_entropies = train_and_apply(e_training,
+                                               f_training,
+                                               apply_to,
+                                               args.llibm1,
+                                               'LL-IBM1',
+                                               args)
+    else:
+        llibm1 = None
+
+    if args.llibm2 > 0:
+        initialiser = {}
+        # configure initialisation
+        if llibm1 is not None:
+            initialiser['IBM1'] = llibm1
+
+        llibm2, llibm2_entropies = train_and_apply(e_training,
+                                               f_training,
+                                               apply_to,
+                                               args.llibm2,
+                                               'LL-IBM2',
+                                               args,
+                                               initialiser)
 
 
 def main():
