@@ -73,7 +73,7 @@ def cmd_estimation(group):
     """Command line options for parameter estimation"""
     group.add_argument('--ibm1',
                        type=int,
-                       default=5,
+                       default=0,
                        metavar='INT',
                        help='Number of iterations of IBM model 1')
     group.add_argument('--ibm2',
@@ -83,7 +83,7 @@ def cmd_estimation(group):
                        help='Number of iterations of IBM model 2')
     group.add_argument('--llibm1',
                        type=int,
-                       default=5,
+                       default=0,
                        metavar='INT',
                        help='Number of iterations of log-linear IBM model 1')
     group.add_argument('--llibm2',
@@ -262,10 +262,10 @@ def get_ibm1_loglinear(e_corpus, f_corpus, args):
     feature_size = feature_matrix.get_feature_size()
     weight_vector = np.full((1, feature_size), 1.0 / feature_size, dtype=np.float)
     return LogLinearIBM1(LogLinearParameters(e_corpus.vocab_size(),
-                         f_corpus.vocab_size(),
-                         weight_vector,
-                         feature_matrix,
-                         p=0.0))
+                                             f_corpus.vocab_size(),
+                                             weight_vector,
+                                             feature_matrix,
+                                             p=0.0))
 
 
 def get_ibm2_loglinear(e_corpus, f_corpus, args):

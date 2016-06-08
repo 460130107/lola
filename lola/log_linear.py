@@ -46,7 +46,7 @@ class LogisticRegression:
         :return: exp(w dot phi)
         """
         phi = self._feature_matrix.get_feature_vector(f, e)
-        return np.exp(phi.dot(self._weight_vector))
+        return np.exp(phi.dot(self._weight_vector))[0] # np.exp(phi.dot(w)) returns a list/array with one element. 
 
     def denominator(self, e):
         """
@@ -130,30 +130,30 @@ class ObjectiveAndGradient:
 
 class LogLinearParameters(GenerativeComponent):  # Component
 
-    def __init__(self, e_corpus: Corpus, f_corpus: Corpus,
+    def __init__(self, e_vocab_size, f_vocab_size,
                  weight_vector: np.array,
                  feature_matrix: FeatureMatrix,
                  p=0.0):
         self._weight_vector = weight_vector  # np.array of w's
         self._feature_matrix = feature_matrix  # dok matrix for each decision (context x features)
-        self._e_corpus = e_corpus
-        self._f_corpus = f_corpus
-        self._cpds = sparse.CPDTable(e_corpus.vocab_size(), f_corpus.vocab_size(), p) # expected counts
+        self._e_vocab_size = e_vocab_size
+        self._f_vocab_size = f_vocab_size
+        self._cpds = sparse.CPDTable(e_vocab_size, f_vocab_size, p) # expected counts
         self._logistic_regression = LogisticRegression(feature_matrix,
                                                        weight_vector,
-                                                       f_corpus.vocab_size())
+                                                       f_vocab_size)
 
     def e_vocab_size(self):
         """
         :return: vocabulary size of English corpus
         """
-        return self._e_corpus.vocab_size()
+        return self._e_vocab_size
 
     def f_vocab_size(self):
         """
         :return: vocabulary size of English corpus
         """
-        return self._f_corpus.vocab_size()
+        return self._f_vocab_size
 
     def get(self, e_snt, f_snt, i: int, j: int):
         """
@@ -211,14 +211,14 @@ class LogLinearParameters(GenerativeComponent):  # Component
         self._weight_vector = w
         self._logistic_regression = LogisticRegression(self._feature_matrix,
                                                        w,
-                                                       self._f_corpus.vocab_size())
+                                                       self._f_vocab_size)
 
     def climb(self, steps=1, max_attempts=5):
 
         def f(w):
             loglikelihood = ObjectiveAndGradient(self._cpds, self._feature_matrix,
-                                 self._e_corpus.vocab_size(),
-                                 self._f_corpus.vocab_size())
+                                 self._e_vocab_size,
+                                 self._f_vocab_size)
             # in this function we change the logic from maximisation to minimisation
             objective, gradient = loglikelihood.evaluate(w)
             objective *= -1
@@ -256,7 +256,7 @@ class LogLinearParameters(GenerativeComponent):  # Component
         """
         :return: copy of itself, initialized with 0's
         """
-        return LogLinearParameters(self.e_vocab_size(), self.f_vocab_size(), 0.0)
+        return LogLinearParameters(self.e_vocab_size(), self.f_vocab_size(), self._weight_vector, self._feature_matrix, 0.0)
 
     def save(self, e_corpus, f_corpus, path):
         # save in '{0}.w'.format(path) the weight vector
