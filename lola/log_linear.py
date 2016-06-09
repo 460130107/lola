@@ -46,7 +46,8 @@ class LogisticRegression:
         :return: exp(w dot phi)
         """
         phi = self._feature_matrix.get_feature_vector(f, e)
-        return np.exp(phi.dot(self._weight_vector))[0] # np.exp(phi.dot(w)) returns a list/array with one element. 
+        print("phi: ", phi.shape, "w: ", self._weight_vector.shape)
+        return np.exp(phi.dot(self._weight_vector)) #[0] # np.exp(phi.dot(w)) returns a list/array with one element. 
 
     def denominator(self, e):
         """
