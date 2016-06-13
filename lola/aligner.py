@@ -91,6 +91,10 @@ def cmd_estimation(group):
                        default=0,
                        metavar='INT',
                        help='Number of iterations of log-linear IBM model 2')
+    group.add_argument('--steps', type=int, default=3, metavar='INT',
+                       help='Number of iterations of L-BFGS-B')
+    group.add_argument('--attempts', type=int, default=5, metavar='INT',
+                       help='Maximum number of function evaluations in L-BFGS-B')
 
 
 def cmd_logging(group):
@@ -257,28 +261,36 @@ def get_ibm2(e_corpus, f_corpus, args):
 
 
 def get_ibm1_loglinear(e_corpus, f_corpus, args):
+    logging.info('Extracting lexical features')
     lex_features = LexFeatures(e_corpus, f_corpus)
     feature_matrix = FeatureMatrix(e_corpus, f_corpus, lex_features)
     feature_size = feature_matrix.get_feature_size()
-    weight_vector = np.full((1, feature_size), 1.0 / feature_size, dtype=np.float)
+    logging.info('Unique lexical features: %d', feature_size)
+    #weight_vector = np.full((1, feature_size), 1.0 / feature_size, dtype=np.float)
+    weight_vector = np.full(feature_size, 1.0 / feature_size, dtype=np.float)
+
     return LogLinearIBM1(LogLinearParameters(e_corpus.vocab_size(),
                                              f_corpus.vocab_size(),
                                              weight_vector,
                                              feature_matrix,
-                                             p=0.0))
+                                             p=0.0,
+                                             lbfgs_steps=args.steps,
+                                             lbfgs_max_attempts=args.attempts))
 
 
 def get_ibm2_loglinear(e_corpus, f_corpus, args):
     lex_features = LexFeatures(e_corpus, f_corpus)
     feature_matrix = FeatureMatrix(e_corpus, f_corpus, lex_features)
     feature_size = feature_matrix.get_feature_size()
-    weight_vector = np.full((1, feature_size), 1.0 / feature_size, dtype=np.float)
+    weight_vector = np.full(feature_size, 1.0 / feature_size, dtype=np.float)
     if args.distortion_type == 'Vogel':
         return VogelLogLinearIBM2(LogLinearParameters(e_corpus.vocab_size(),
                                                       f_corpus.vocab_size(),
                                                       weight_vector,
                                                       feature_matrix,
-                                                      p=0.0),
+                                                      p=0.0,
+                                                      lbfgs_steps=args.steps,
+                                                      lbfgs_max_attempts=args.attempts),
                                   JumpParameters(e_corpus.max_len(),
                                                  f_corpus.max_len(),
                                                  1.0 / (e_corpus.max_len() + f_corpus.max_len() + 1)))
@@ -287,7 +299,9 @@ def get_ibm2_loglinear(e_corpus, f_corpus, args):
                                                       f_corpus.vocab_size(),
                                                       weight_vector,
                                                       feature_matrix,
-                                                      p=0.0),
+                                                      p=0.0,
+                                                      lbfgs_steps=args.steps,
+                                                      lbfgs_max_attempts=args.attempts),
                                   BrownDistortionParameters(e_corpus.max_len(),
                                                             1.0 / (e_corpus.max_len())))
     else:

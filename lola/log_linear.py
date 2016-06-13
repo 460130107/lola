@@ -5,6 +5,8 @@ import collections
 from lola.feature_vector import FeatureMatrix
 from lola.corpus import Corpus
 from scipy.optimize import minimize
+from scipy.sparse import dok_matrix
+import logging
 
 
 class LogisticRegression:
@@ -18,16 +20,25 @@ class LogisticRegression:
 
     def __init__(self, feature_matrix: FeatureMatrix,
                  weight_vector: 'np.array',
+                 e_vocab_size: int,
                  f_vocab_size: int):
         self._feature_matrix = feature_matrix
         self._weight_vector = weight_vector
-        self._denominator_cache = collections.defaultdict(float)
+        self._e_vocab_size = e_vocab_size
         self._f_vocab_size = f_vocab_size
+        # we initialise a cache with negative values for numerators
+        # where a negative value means that the potential associated with a certain pair (e,f) has not
+        # yet been computed
+        self._numerator_cache = np.full((e_vocab_size, f_vocab_size), -1, dtype=float)
+        # we initialise a cache with negative values for the denominators
+        # denominators are sums over potentials, thus they can never be negative
+        # here a negative value simply indicates we haven't yet computed Z(e) for a given e.
+        self._denominator_cache = np.full(e_vocab_size, -1, dtype=float)
 
-    def feature_vector(self, e: int, f: int):
+    def feature_vector(self, e: int, f: int) -> dok_matrix:
         return self._feature_matrix.get_feature_vector(f, e)
 
-    def probability(self, e: int, f: int):
+    def probability(self, e: int, f: int) -> float:
         """
         Because we don't have the e and f sentences, we need another formula to calculate theta,
         also because I have not saved the theta's somewhere on forehand
@@ -38,18 +49,24 @@ class LogisticRegression:
         """
         return self.potential(e, f) / self.denominator(e)
 
-    def potential(self, e, f):
+    def potential(self, e, f) -> float:
         """
         Calculate the potential (an unnormalised probability) for a given f and e
         :param e: English word
         :param f: French word
         :return: exp(w dot phi)
         """
-        phi = self._feature_matrix.get_feature_vector(f, e)
-        print("phi: ", phi.shape, "w: ", self._weight_vector.shape)
-        return np.exp(phi.dot(self._weight_vector)) #[0] # np.exp(phi.dot(w)) returns a list/array with one element. 
 
-    def denominator(self, e):
+        potential = self._numerator_cache[e, f]
+        if potential < 0:  # potentials can never be negative, thus we haven't computed this one yet
+            # compute the potential
+            phi = self._feature_matrix.get_feature_vector(f, e)
+            potential = np.exp(phi.dot(self._weight_vector)[0])  # phi.dot(w) returns a list/array with one element.
+            # store it in the cache
+            self._numerator_cache[e, f] = potential
+        return potential
+
+    def denominator(self, e) -> float:
         """
         Calculate a denominator Z for a given e, where
             Z = sum_f exp(w * phi(e,f))
@@ -58,12 +75,14 @@ class LogisticRegression:
         :param e: English word
         :return: Z
         """
-        Z = self._denominator_cache.get(e, None)
-        if Z is None:
+        Z = self._denominator_cache[e]
+        if Z < 0:  # this denominator has not yet been computed
+            logging.debug(' Computing Z(e=%d)', e)
             Z = 0.0
             for f in range(self._f_vocab_size):
                 Z += self.potential(e, f)
             self._denominator_cache[e] = Z
+            logging.debug(' Z(e=%d)=%f', e, Z)
         return Z
 
 
@@ -84,7 +103,7 @@ class ObjectiveAndGradient:
         self._e_vocab_size = e_vocab_size
         self._f_vocab_size = f_vocab_size
 
-    def expected_feature_vector(self, e: int, logistic_regression: LogisticRegression):
+    def expected_feature_vector(self, e: int, logistic_regression: LogisticRegression) -> dok_matrix:
         """
         calculates expected feature vectors: mu_c = sum_d'(theta(c,d')*f(c,d')) for each context e
         :return: dictionary of expected feature vectors for each context
@@ -97,7 +116,7 @@ class ObjectiveAndGradient:
             mu += theta * feature_vector
         return mu
 
-    def evaluate(self, weight_vector: np.array, regulariser_strength=0.0):
+    def evaluate(self, weight_vector: np.array, regulariser_strength=0.0) -> tuple:
         """
             1. Initialise a logistic regression with the new weight vector (w)
                 This basically produces a conditional probability for each
@@ -112,11 +131,14 @@ class ObjectiveAndGradient:
 
         logistic_regression = LogisticRegression(self._feature_matrix,
                                                  weight_vector,
+                                                 self._e_vocab_size,
                                                  self._f_vocab_size)
         gradient = self._feature_matrix.zero_vec()
         objective = 0.0  # this is the expected log likelihood
         for e in range(self._e_vocab_size):
+            logging.debug('Computing expected features for e=%d', e)
             expected_feature_vector = self.expected_feature_vector(e, logistic_regression)
+            logging.debug(' updating gradient')
             for f in range(self._f_vocab_size):
                 expected_counts = self._expected_counts.get(e, f)  # expected counts from e-step
                 theta = logistic_regression.probability(e, f)  # theta_c,d(w) for each w (thus theta is a vector w's)
@@ -134,29 +156,34 @@ class LogLinearParameters(GenerativeComponent):  # Component
     def __init__(self, e_vocab_size, f_vocab_size,
                  weight_vector: np.array,
                  feature_matrix: FeatureMatrix,
-                 p=0.0):
+                 p=0.0,
+                 lbfgs_steps=3,
+                 lbfgs_max_attempts=5):
         self._weight_vector = weight_vector  # np.array of w's
         self._feature_matrix = feature_matrix  # dok matrix for each decision (context x features)
         self._e_vocab_size = e_vocab_size
         self._f_vocab_size = f_vocab_size
-        self._cpds = sparse.CPDTable(e_vocab_size, f_vocab_size, p) # expected counts
+        self._cpds = sparse.CPDTable(e_vocab_size, f_vocab_size, p)  # expected counts
         self._logistic_regression = LogisticRegression(feature_matrix,
                                                        weight_vector,
+                                                       e_vocab_size,
                                                        f_vocab_size)
+        self._lbfgs_steps = lbfgs_steps
+        self._lbfgs_max_attempts = lbfgs_max_attempts
 
-    def e_vocab_size(self):
+    def e_vocab_size(self) -> int:
         """
         :return: vocabulary size of English corpus
         """
         return self._e_vocab_size
 
-    def f_vocab_size(self):
+    def f_vocab_size(self) -> int:
         """
         :return: vocabulary size of English corpus
         """
         return self._f_vocab_size
 
-    def get(self, e_snt, f_snt, i: int, j: int):
+    def get(self, e_snt, f_snt, i: int, j: int) -> float:
         """
         return a parameter (probability) for e[i] (context) and f[j] (decision)
         let's call this parameter theta
@@ -208,38 +235,51 @@ class LogLinearParameters(GenerativeComponent):  # Component
                 (which is the change in w)
         :return:
         """
-        w = self.climb(steps=3, max_attempts=3)  # this is the REPEAT in the paper
+        w = self.climb()  # this is the REPEAT in the paper
         self._weight_vector = w
         self._logistic_regression = LogisticRegression(self._feature_matrix,
                                                        w,
+                                                       self._e_vocab_size,
                                                        self._f_vocab_size)
 
-    def climb(self, steps=1, max_attempts=5):
+    def climb(self):
+
+        iteration = 0
+        f_calls = 0
 
         def f(w):
+            nonlocal f_calls
+            f_calls += 1
+            logging.info('[%d] Computing objective and gradient [%d]', iteration, f_calls)
             loglikelihood = ObjectiveAndGradient(self._cpds, self._feature_matrix,
                                  self._e_vocab_size,
                                  self._f_vocab_size)
             # in this function we change the logic from maximisation to minimisation
             objective, gradient = loglikelihood.evaluate(w)
+            logging.info('[%d] Objective [%d] %f', iteration, f_calls, objective)
             objective *= -1
             gradient *= -1
             return objective, gradient.toarray()[0]  # weird scipy notation
 
         def callback(w):
+            nonlocal iteration
+            iteration += 1
             # can use logging.info(...)
             # to print the current w on the screen
-            pass
+            logging.info('[%d] L-BFGS-B found new weights', iteration)
 
         # This is our initial vector, namely, the one we used in the E-step
         w0 = self._weight_vector
+        logging.info('Optimising log-linear (lexical) parameters for %d steps of L-BFGS-B (max %d evaluations)',
+                     self._lbfgs_steps,
+                     self._lbfgs_max_attempts)
         result = minimize(f,  # this function returns (for a given w) the negative likelihood and negative gradient
                  w0, # initial vector
                  method='L-BFGS-B',  # variant of GD
                  jac=True,  # yes we are returning the gradient through function f
                  callback=callback,  # this is the function called each time the algorithm finds a new w
-                 options={'maxiter': steps,  # options of L-BFGS-B
-                          'maxfun': max_attempts,
+                 options={'maxiter': self._lbfgs_steps,  # options of L-BFGS-B
+                          'maxfun': self._lbfgs_max_attempts,
                           'ftol': 1e-6,
                           'gtol': 1e-6,
                           'disp': False})
