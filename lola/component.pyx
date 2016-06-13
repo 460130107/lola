@@ -9,6 +9,12 @@ from libc cimport math as c_math
 
 cdef class GenerativeComponent:
 
+    def __init__(self, str name):
+        self._name = name
+
+    cpdef str name(self):
+        return self._name
+
     cpdef float get(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
         """Get the component value associated with a decision a_j=i."""
         pass
@@ -42,13 +48,14 @@ cdef class LexicalParameters(GenerativeComponent):
         * each distribution defined over the French vocabulary
     """
 
-    def __init__(self, size_t e_vocab_size, size_t f_vocab_size, float p=0.0):
+    def __init__(self, size_t e_vocab_size, size_t f_vocab_size, float p=0.0, str name='lexical'):
         """
 
         :param e_vocab_size: size of English vocabulary (number of categorical distributions)
         :param f_vocab_size: size of French vocabulary (support of each categorical distribution)
         :param p: initial value (e.g. use 1.0/f_vocab_size to get uniform distributions)
         """
+        super(LexicalParameters, self).__init__(name)
         self._e_vocab_size = e_vocab_size
         self._f_vocab_size = f_vocab_size
         self._cpds = CPDTable(e_vocab_size, f_vocab_size, p)
@@ -83,7 +90,7 @@ cdef class LexicalParameters(GenerativeComponent):
         cdef size_t f
         cdef float p
         cdef tuple pair
-        with open('{0}.lex'.format(path), 'w') as fo:
+        with open('{0}.{1}'.format(path, self.name()), 'w') as fo:
             for e in range(self._e_vocab_size):
                 for f, p in sorted(self._cpds.iternonzero(e), key=cmp_prob):
                     print('{0} {1} {2}'.format(e_corpus.translate(e), f_corpus.translate(f), p), file=fo)
@@ -95,8 +102,8 @@ cdef class DistortionParameters(GenerativeComponent):
 
 cdef class UniformAlignment(DistortionParameters):
 
-    def __init__(self):
-        pass
+    def __init__(self, str name='uniformdist'):
+        super(UniformAlignment, self).__init__(name)
 
     @cython.cdivision(True)
     cpdef float get(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
@@ -121,7 +128,8 @@ cdef class JumpParameters(DistortionParameters):
     """
 
 
-    def __init__(self, int max_english_len, int max_french_len, float base_value):
+    def __init__(self, int max_english_len, int max_french_len, float base_value, str name='jump'):
+        super(JumpParameters, self).__init__(name)
         self._max_english_len = max_english_len
         self._max_french_len = max_french_len
         self._categorical = SparseCategorical(max_english_len + max_french_len + 1, base_value)
@@ -178,14 +186,15 @@ cdef class JumpParameters(DistortionParameters):
         cdef size_t f
         cdef float p
         cdef tuple pair
-        with open('{0}.jump'.format(path), 'w') as fo:
+        with open('{0}.{1}'.format(path, self.name()), 'w') as fo:
             for jump, p in sorted(self._categorical.iternonzero(), key=cmp_prob):
                 print('{0} {1}'.format(jump, p), file=fo)
 
 
 cdef class BrownDistortionParameters(DistortionParameters):
 
-    def __init__(self, int max_english_len, float base_value):
+    def __init__(self, int max_english_len, float base_value, str name='browndist'):
+        super(BrownDistortionParameters, self).__init__(name)
         self._max_english_len = max_english_len
         self._base_value = base_value
         self._cpds = dict()

@@ -157,7 +157,9 @@ class LogLinearParameters(GenerativeComponent):  # Component
                  feature_matrix: FeatureMatrix,
                  p=0.0,
                  lbfgs_steps=3,
-                 lbfgs_max_attempts=5):
+                 lbfgs_max_attempts=5,
+                 name='llLexical'):
+        super(LogLinearParameters, self).__init__(name)
         self._weight_vector = weight_vector  # np.array of w's
         self._feature_matrix = feature_matrix  # dok matrix for each decision (context x features)
         self._e_vocab_size = e_vocab_size
@@ -301,7 +303,11 @@ class LogLinearParameters(GenerativeComponent):  # Component
     def save(self, e_corpus, f_corpus, path):
         # save in '{0}.w'.format(path) the weight vector
         # and in '{0}.cat'.format(path) the output of logistic regression for every e-f pair
-        pass
+        with open('{0}.{1}'.format(path, self.name()), 'w') as fo:
+            for fid, w in enumerate(self._weight_vector):
+                print('{0}\t{1}\t{2}'.format(fid, self._feature_matrix.get_feature_string(fid), w), file=fo)
+
+
 
 from lola.model import DefaultModel
 from lola.component import UniformAlignment, JumpParameters, BrownDistortionParameters

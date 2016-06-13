@@ -13,7 +13,8 @@ from lola.feature_vector import FeatureMatrix
 from lola.extractor import LexFeatures
 from lola.model import save_model
 from functools import partial
-
+from lola.config import make_model
+from lola.model import DefaultModel
 
 
 
@@ -49,6 +50,7 @@ def argparser():
                         help='Type of distortion parameters')
 
     cmd_estimation(parser.add_argument_group('Parameter estimation'))
+    cmd_model(parser.add_argument_group('Model'))
     cmd_extractor(parser.add_argument_group('Feature extraction'))
     cmd_naacl(parser.add_argument_group('NAACL Format'))
     cmd_logging(parser.add_argument_group('Logging'))
@@ -99,6 +101,10 @@ def cmd_estimation(group):
     group.add_argument('--uniform-w', action='store_true',
                        help='By default we initialise w uniformly from a Gaussian(0.0, 1.0).'
                             'Use this for deterministic uniform weights 1.0/d.')
+
+def cmd_model(group):
+    group.add_argument('--model', type=str,
+                       help='Path to a model description')
 
 def cmd_extractor(group):
     group.add_argument('--min-count', type=int, default=1, metavar='INT',
@@ -381,6 +387,62 @@ def train_and_apply(e_training, f_training, apply_to, iterations, model_type, ar
     return model, entropies
 
 
+def train_and_apply2(e_training, f_training, apply_to, iterations,
+                     model: DefaultModel, model_name, args, initialiser=None):
+    logging.info('Starting %d iterations of %s', iterations, model_name)
+    # train it with EM for a number of iterations
+    model, training_entropy = hmm0.EM(e_training, f_training, iterations, model)
+
+    if args.save_entropy:  # save the entropy of each EM iteration
+        save_entropy(training_entropy, '{0}/{1}.EM'.format(args.output, model_name))
+
+    if args.save_parameters:
+        logging.info('Saving parameters of %s', model_name)
+        save_model(model, e_training, f_training, '{0}/{1}'.format(args.output, model_name))
+
+    entropies = []
+    # apply model to each parallel corpus
+    for name, e_corpus, f_corpus, ids in apply_to:
+        corpus_entropy = hmm0.empirical_cross_entropy(e_corpus, f_corpus, model)
+
+        entropies.append(corpus_entropy)
+        logging.info('%s %s set perplexity: %f', model_name, name, corpus_entropy)
+
+        if args.viterbi:
+            logging.info('Saving %s Viterbi decisions for %s', model_name, name)
+            # apply model to training data
+            save_viterbi(e_corpus, f_corpus, ids,
+                         model,
+                         '{0}/{1}.{2}.viterbi'.format(args.output, model_name, name),
+                         args)
+
+    return model, entropies
+
+
+def pipeline2(e_training, f_training, apply_to, args):
+
+    models, iterations = make_model(args.model, e_training, f_training, args)
+    import shutil
+    shutil.copy(args.model, '{0}/model.ini'.format(args.output))
+
+    for i in range(len(models)):
+        if i > 0:
+            # update the components of the current model using the previously trained one
+            models[i].initialise({c.name():c for c in models[i - 1].components()})
+        model_number = i + 1
+        model_name = 'Model%d' % model_number
+        iters = iterations[i]
+        logging.info('%d iterations of %s: %s', iters, model_name, models[i])
+        # train and update model
+        models[i], entropies = train_and_apply2(e_training,
+                                                f_training,
+                                                apply_to,
+                                                iters,
+                                                models[i],
+                                                model_name,
+                                                args)
+
+
 def pipeline(e_training, f_training, apply_to, args):
 
     if args.ibm1 > 0:
@@ -476,7 +538,7 @@ def main():
         e_merged = e_training
         f_merged = f_training
 
-    pipeline(e_merged, f_merged, apply_to, args)
+    pipeline2(e_merged, f_merged, apply_to, args)
 
 
 if __name__ == '__main__':

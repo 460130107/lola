@@ -128,6 +128,10 @@ cdef class DefaultModel(GenerativeModel):
     def __iter__(self):
         return iter(self._components)
 
+    def __str__(self):
+        cdef GenerativeComponent comp
+        return ', '.join([comp.name() for comp in self._components])
+
     cpdef size_t n_components(self):
         return len(self._components)
 
@@ -136,6 +140,18 @@ cdef class DefaultModel(GenerativeModel):
 
     cpdef GenerativeComponent component(self, size_t n):
         return self._components[n]
+
+    cpdef initialise(self, dict initialiser):
+        """
+        Some models can be initialised from other models parameters.
+        """
+        cdef:
+            size_t i
+            GenerativeComponent comp
+        for i in range(len(self._components)):
+            comp = self._components[i]
+            if comp.name() in initialiser:
+                self._components[i] = initialiser[comp.name()]
 
     cpdef float likelihood(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
         """

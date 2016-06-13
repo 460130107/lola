@@ -6,6 +6,10 @@ from lola.sparse cimport CPDTable
 
 cdef class GenerativeComponent:
 
+    cdef str _name
+
+    cpdef str name(self)
+
     cpdef float get(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j)
 
     cpdef float plus_equals(self,  np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p)

@@ -26,7 +26,9 @@ class FeatureMatrix:
         # we use a defaultdict so that pairs are automatically created for us
         # we mark a newly created feature with a negative id id and a 0 count
         self._feature_dict = defaultdict(lambda: [-1, 0])
+        self._id_to_str = []
         self._feature_vector, self._max_rows, self._max_cols = self.initialise(e_corpus, f_corpus, extractor)
+
 
     def initialise(self, e_corpus, f_corpus, extractor):
         """
@@ -60,6 +62,7 @@ class FeatureMatrix:
                         if f_info[0] == -1:  # we haven't yet seen this feature
                             # thus we update its id
                             f_info[0] = len(self._feature_dict) - 1
+                            self._id_to_str.append(feature)
                         # and we increment the feature count
                         f_info[1] += 1
                         e_features.append(f_info)  # fire this feature for the given (e,f) pair
@@ -68,6 +71,7 @@ class FeatureMatrix:
         n_deleted_features = 0
         if self._min_occurrences > 1 or self._max_occurrences > 0:
             # here we clean up the feature space
+            self._id_to_str = []
             for f_str, f_info in sorted(self._feature_dict.items(), key=lambda kv: kv[1][0]):
                 # we may want to prune this feature
                 if f_info[1] < self._min_occurrences or (0 < self._max_occurrences < f_info[1]):
@@ -75,6 +79,7 @@ class FeatureMatrix:
                     n_deleted_features += 1  # then we increment the number of deleted features
                 else:  # if we are not pruning, we might be shifting its id taking deleted features into account
                     f_info[0] -= n_deleted_features
+                    self._id_to_str.append(f_str)
 
         r = e_corpus.vocab_size()  # max rows
         d = len(self._feature_dict) - n_deleted_features  # max columns (we discard deleted features)
@@ -147,6 +152,9 @@ class FeatureMatrix:
 
     def get_feature_size(self):
         return self._max_cols
+
+    def get_feature_string(self, fid: int) -> str:
+        return self._id_to_str[fid]
 
 if __name__ == '__main__':
 
