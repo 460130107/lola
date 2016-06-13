@@ -5,11 +5,12 @@ import collections
 from lola.feature_vector import FeatureMatrix
 from lola.corpus import Corpus
 from scipy.optimize import minimize
-from scipy.sparse import dok_matrix
+from scipy.sparse import csr_matrix
 import logging
+from lola.logreg import LogisticRegression
 
 
-class LogisticRegression:
+class PyLogisticRegression:
     """"
     This class deals with the computation of categorical parameters
     based on a log-linear formulation.
@@ -35,7 +36,7 @@ class LogisticRegression:
         # here a negative value simply indicates we haven't yet computed Z(e) for a given e.
         self._denominator_cache = np.full(e_vocab_size, -1, dtype=float)
 
-    def feature_vector(self, e: int, f: int) -> dok_matrix:
+    def feature_vector(self, e: int, f: int) -> csr_matrix:
         return self._feature_matrix.get_feature_vector(f, e)
 
     def probability(self, e: int, f: int) -> float:
@@ -77,12 +78,10 @@ class LogisticRegression:
         """
         Z = self._denominator_cache[e]
         if Z < 0:  # this denominator has not yet been computed
-            logging.debug(' Computing Z(e=%d)', e)
             Z = 0.0
             for f in range(self._f_vocab_size):
                 Z += self.potential(e, f)
             self._denominator_cache[e] = Z
-            logging.debug(' Z(e=%d)=%f', e, Z)
         return Z
 
 
@@ -103,12 +102,12 @@ class ObjectiveAndGradient:
         self._e_vocab_size = e_vocab_size
         self._f_vocab_size = f_vocab_size
 
-    def expected_feature_vector(self, e: int, logistic_regression: LogisticRegression) -> dok_matrix:
+    def expected_feature_vector(self, e: int, logistic_regression: LogisticRegression) -> csr_matrix:
         """
         calculates expected feature vectors: mu_c = sum_d'(theta(c,d')*f(c,d')) for each context e
         :return: dictionary of expected feature vectors for each context
         """
-        mu = self._feature_matrix.zero_vec()
+        mu = self._feature_matrix.sparse_zero_vec()
         # loop over all decisions f and sum (theta * feature_vector)
         for f in range(self._f_vocab_size):
             theta = logistic_regression.probability(e, f)
@@ -126,14 +125,14 @@ class ObjectiveAndGradient:
                 see formula 4 , second line, last term
             3. Gradient and Expected likelihood (which reuses the fixed expected counts)
                 see formula 3 and 4
-        :returns: expected log likelihood (for maximisation) and gradient (sparse dok_matrix)
+        :returns: expected log likelihood (for maximisation) and gradient (csr_matrix)
         """
 
         logistic_regression = LogisticRegression(self._feature_matrix,
                                                  weight_vector,
                                                  self._e_vocab_size,
                                                  self._f_vocab_size)
-        gradient = self._feature_matrix.zero_vec()
+        gradient = self._feature_matrix.sparse_zero_vec()
         objective = 0.0  # this is the expected log likelihood
         for e in range(self._e_vocab_size):
             logging.debug('Computing expected features for e=%d', e)
@@ -183,7 +182,7 @@ class LogLinearParameters(GenerativeComponent):  # Component
         """
         return self._f_vocab_size
 
-    def get(self, e_snt, f_snt, i: int, j: int) -> float:
+    def get(self, e_snt: np.array, f_snt: np.array, i: int, j: int) -> float:
         """
         return a parameter (probability) for e[i] (context) and f[j] (decision)
         let's call this parameter theta
@@ -204,7 +203,7 @@ class LogLinearParameters(GenerativeComponent):  # Component
         """
         return self._logistic_regression.probability(e_snt[i], f_snt[j])
 
-    def plus_equals(self, e_snt, f_snt, i, j, p):
+    def plus_equals(self, e_snt: np.array, f_snt: np.array, i: int, j: int, p: float):
         """
         Accumulate fractional counts (p) for events (e_i as context, f_j as decision)
         table[e_i][f_j] += p

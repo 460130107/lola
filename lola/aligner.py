@@ -49,6 +49,7 @@ def argparser():
                         help='Type of distortion parameters')
 
     cmd_estimation(parser.add_argument_group('Parameter estimation'))
+    cmd_extractor(parser.add_argument_group('Feature extraction'))
     cmd_naacl(parser.add_argument_group('NAACL Format'))
     cmd_logging(parser.add_argument_group('Logging'))
 
@@ -95,7 +96,15 @@ def cmd_estimation(group):
                        help='Number of iterations of L-BFGS-B')
     group.add_argument('--attempts', type=int, default=5, metavar='INT',
                        help='Maximum number of function evaluations in L-BFGS-B')
+    group.add_argument('--uniform-w', action='store_true',
+                       help='By default we initialise w uniformly from a Gaussian(0.0, 1.0).'
+                            'Use this for deterministic uniform weights 1.0/d.')
 
+def cmd_extractor(group):
+    group.add_argument('--min-count', type=int, default=1, metavar='INT',
+                       help='If positive, prune rare features.')
+    group.add_argument('--max-count', type=int, default=-1, metavar='INT',
+                   help='If positive, prune features that occur too often.')
 
 def cmd_logging(group):
     """Command line options for output level"""
@@ -263,11 +272,17 @@ def get_ibm2(e_corpus, f_corpus, args):
 def get_ibm1_loglinear(e_corpus, f_corpus, args):
     logging.info('Extracting lexical features')
     lex_features = LexFeatures(e_corpus, f_corpus)
-    feature_matrix = FeatureMatrix(e_corpus, f_corpus, lex_features)
+    feature_matrix = FeatureMatrix(e_corpus, f_corpus, lex_features,
+                                   min_occurences=args.min_count, max_occurrences=args.max_count)
     feature_size = feature_matrix.get_feature_size()
     logging.info('Unique lexical features: %d', feature_size)
-    #weight_vector = np.full((1, feature_size), 1.0 / feature_size, dtype=np.float)
-    weight_vector = np.full(feature_size, 1.0 / feature_size, dtype=np.float)
+    # this is wrong!
+    # weight_vector = np.full((1, feature_size), 1.0 / feature_size, dtype=np.float)
+    # a uniform initialisation would look like this
+    if args.uniform_w:
+        weight_vector = np.full(feature_size, 1.0 / feature_size, dtype=np.float)
+    else:  # but we better go with normal random initialisation
+        weight_vector = np.random.normal(0, 1.0, feature_size)
 
     return LogLinearIBM1(LogLinearParameters(e_corpus.vocab_size(),
                                              f_corpus.vocab_size(),
@@ -280,9 +295,16 @@ def get_ibm1_loglinear(e_corpus, f_corpus, args):
 
 def get_ibm2_loglinear(e_corpus, f_corpus, args):
     lex_features = LexFeatures(e_corpus, f_corpus)
-    feature_matrix = FeatureMatrix(e_corpus, f_corpus, lex_features)
+    feature_matrix = FeatureMatrix(e_corpus, f_corpus, lex_features,
+                                   min_occurences=args.min_count, max_occurrences=args.max_count)
     feature_size = feature_matrix.get_feature_size()
-    weight_vector = np.full(feature_size, 1.0 / feature_size, dtype=np.float)
+    # this is wrong!
+    # weight_vector = np.full((1, feature_size), 1.0 / feature_size, dtype=np.float)
+    # a uniform initialisation would look like this
+    if args.uniform_w:
+        weight_vector = np.full(feature_size, 1.0 / feature_size, dtype=np.float)
+    else:  # but we better go with normal random initialisation
+        weight_vector = np.random.normal(0, 1.0, feature_size)
     if args.distortion_type == 'Vogel':
         return VogelLogLinearIBM2(LogLinearParameters(e_corpus.vocab_size(),
                                                       f_corpus.vocab_size(),
