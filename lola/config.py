@@ -3,7 +3,7 @@
 """
 import numpy as np
 import lola.util as util
-from lola.component import LexicalParameters, JumpParameters, BrownDistortionParameters
+from lola.component import LexicalParameters, UniformAlignment, JumpParameters, BrownDistortionParameters
 from lola.log_linear import LogLinearParameters
 from lola.model import DefaultModel
 from lola.feature_vector import FeatureMatrix
@@ -66,6 +66,8 @@ def read_component(e_corpus, f_corpus, args, line, i, components, specs: default
                                              f_corpus.vocab_size(),
                                              p=1.0 / f_corpus.vocab_size(),
                                              name=name)
+    elif component_type == 'UniformAlignment':
+        components[name] = UniformAlignment(name=name)
     elif component_type == 'VogelJump':
         components[name] = JumpParameters(e_corpus.max_len(),
                                           f_corpus.max_len(),
