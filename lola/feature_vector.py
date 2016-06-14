@@ -119,6 +119,7 @@ class FeatureMatrix:
         # thus after the sparse matrix is created we convert it to a csr_matrix
         return dok.tocsr()
 
+
     def get_feature_vector(self, f: int, e: int) -> sparse.csr_matrix:
         """
         returns a feature vector of a word pair

@@ -6,11 +6,6 @@ import os
 
 from lola.corpus import Corpus, CorpusView
 import lola.hmm0 as hmm0
-from lola.component import LexicalParameters, JumpParameters, BrownDistortionParameters
-from lola.fast_ibm import IBM1, VogelIBM2, BrownIBM2
-from lola.log_linear import LogLinearParameters, LogLinearIBM1, VogelLogLinearIBM2, BrownLogLinearIBM2
-from lola.feature_vector import FeatureMatrix
-from lola.extractor import LexFeatures
 from lola.model import save_model
 from functools import partial
 from lola.config import configure

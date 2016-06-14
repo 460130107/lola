@@ -1,7 +1,6 @@
 cimport numpy as np
 import numpy as np
 from lola.feature_vector import FeatureMatrix
-from scipy.sparse import dok_matrix
 import logging
 cimport cython
 
@@ -15,7 +14,7 @@ cdef class LogisticRegression:
     a parameter vector (w).
     """
 
-    def __init__(self, feature_matrix: FeatureMatrix,
+    def __init__(self, feature_matrix,
                  np.float_t[::1] weight_vector,
                  int e_vocab_size,
                  int f_vocab_size):
