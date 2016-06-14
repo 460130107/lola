@@ -17,8 +17,6 @@ from lola.config import make_model
 from lola.model import DefaultModel
 
 
-
-
 def argparser():
     """parse command line arguments"""
 
@@ -27,10 +25,13 @@ def argparser():
     parser.description = 'Log-linear alignment models'
     parser.formatter_class = argparse.ArgumentDefaultsHelpFormatter
 
+    parser.add_argument('config', type=str,
+                        help='Path to a model configuration specifying components, '
+                             'feature extractors, EM iterations for each model, '
+                             'and SGD options where applicable.')
     parser.add_argument('output', metavar='PATH',
                         type=str,
                         help='Output directory')
-
     parser.add_argument('-f', '--french', metavar='FILE',
                         type=str,
                         help='French corpus (the data we generate)')
@@ -45,13 +46,7 @@ def argparser():
                         help='An English test corpus (the data we condition on)')
     parser.add_argument('--merge', action='store_true', default=False,
                         help='Merge training and test set for training')
-    parser.add_argument('--distortion-type', choices=['Vogel', 'Brown'],
-                        type=str, default='Vogel',
-                        help='Type of distortion parameters')
 
-    cmd_estimation(parser.add_argument_group('Parameter estimation'))
-    cmd_model(parser.add_argument_group('Model'))
-    cmd_extractor(parser.add_argument_group('Feature extraction'))
     cmd_naacl(parser.add_argument_group('NAACL Format'))
     cmd_logging(parser.add_argument_group('Logging'))
 
@@ -71,46 +66,6 @@ def cmd_naacl(group):
                         type=str,
                         help='Sentence ids for the test set (for NAACL format).')
 
-
-def cmd_estimation(group):
-    """Command line options for parameter estimation"""
-    group.add_argument('--ibm1',
-                       type=int,
-                       default=0,
-                       metavar='INT',
-                       help='Number of iterations of IBM model 1')
-    group.add_argument('--ibm2',
-                       type=int,
-                       default=0,
-                       metavar='INT',
-                       help='Number of iterations of IBM model 2')
-    group.add_argument('--llibm1',
-                       type=int,
-                       default=0,
-                       metavar='INT',
-                       help='Number of iterations of log-linear IBM model 1')
-    group.add_argument('--llibm2',
-                       type=int,
-                       default=0,
-                       metavar='INT',
-                       help='Number of iterations of log-linear IBM model 2')
-    group.add_argument('--steps', type=int, default=3, metavar='INT',
-                       help='Number of iterations of L-BFGS-B')
-    group.add_argument('--attempts', type=int, default=5, metavar='INT',
-                       help='Maximum number of function evaluations in L-BFGS-B')
-    group.add_argument('--uniform-w', action='store_true',
-                       help='By default we initialise w uniformly from a Gaussian(0.0, 1.0).'
-                            'Use this for deterministic uniform weights 1.0/d.')
-
-def cmd_model(group):
-    group.add_argument('--model', type=str,
-                       help='Path to a model description')
-
-def cmd_extractor(group):
-    group.add_argument('--min-count', type=int, default=1, metavar='INT',
-                       help='If positive, prune rare features.')
-    group.add_argument('--max-count', type=int, default=-1, metavar='INT',
-                   help='If positive, prune features that occur too often.')
 
 def cmd_logging(group):
     """Command line options for output level"""
@@ -251,143 +206,7 @@ def save_entropy(entropies, path):
             print(h, file=fo)
 
 
-def get_ibm1(e_corpus, f_corpus, args):
-    return IBM1(LexicalParameters(e_corpus.vocab_size(),
-                                         f_corpus.vocab_size(),
-                                         p=1.0 / f_corpus.vocab_size()))
-
-
-def get_ibm2(e_corpus, f_corpus, args):
-    if args.distortion_type == 'Vogel':
-        return VogelIBM2(LexicalParameters(e_corpus.vocab_size(),
-                                           f_corpus.vocab_size(),
-                                           p=1.0 / f_corpus.vocab_size()),
-                         JumpParameters(e_corpus.max_len(),
-                                        f_corpus.max_len(),
-                                        1.0 / (e_corpus.max_len() + f_corpus.max_len() + 1)))
-    elif args.distortion_type == 'Brown':
-        return BrownIBM2(LexicalParameters(e_corpus.vocab_size(),
-                                           f_corpus.vocab_size(),
-                                           p=1.0 / f_corpus.vocab_size()),
-                         BrownDistortionParameters(e_corpus.max_len(),
-                                                   1.0 / (e_corpus.max_len())))
-    else:
-        raise ValueError('I do not know this type of parameterisation: %s' % args.distortion_type)
-
-
-def get_ibm1_loglinear(e_corpus, f_corpus, args):
-    logging.info('Extracting lexical features')
-    lex_features = LexFeatures(e_corpus, f_corpus)
-    feature_matrix = FeatureMatrix(e_corpus, f_corpus, lex_features,
-                                   min_occurences=args.min_count, max_occurrences=args.max_count)
-    feature_size = feature_matrix.get_feature_size()
-    logging.info('Unique lexical features: %d', feature_size)
-    # this is wrong!
-    # weight_vector = np.full((1, feature_size), 1.0 / feature_size, dtype=np.float)
-    # a uniform initialisation would look like this
-    if args.uniform_w:
-        weight_vector = np.full(feature_size, 1.0 / feature_size, dtype=np.float)
-    else:  # but we better go with normal random initialisation
-        weight_vector = np.random.normal(0, 1.0, feature_size)
-
-    return LogLinearIBM1(LogLinearParameters(e_corpus.vocab_size(),
-                                             f_corpus.vocab_size(),
-                                             weight_vector,
-                                             feature_matrix,
-                                             p=0.0,
-                                             lbfgs_steps=args.steps,
-                                             lbfgs_max_attempts=args.attempts))
-
-
-def get_ibm2_loglinear(e_corpus, f_corpus, args):
-    lex_features = LexFeatures(e_corpus, f_corpus)
-    feature_matrix = FeatureMatrix(e_corpus, f_corpus, lex_features,
-                                   min_occurences=args.min_count, max_occurrences=args.max_count)
-    feature_size = feature_matrix.get_feature_size()
-    # this is wrong!
-    # weight_vector = np.full((1, feature_size), 1.0 / feature_size, dtype=np.float)
-    # a uniform initialisation would look like this
-    if args.uniform_w:
-        weight_vector = np.full(feature_size, 1.0 / feature_size, dtype=np.float)
-    else:  # but we better go with normal random initialisation
-        weight_vector = np.random.normal(0, 1.0, feature_size)
-    if args.distortion_type == 'Vogel':
-        return VogelLogLinearIBM2(LogLinearParameters(e_corpus.vocab_size(),
-                                                      f_corpus.vocab_size(),
-                                                      weight_vector,
-                                                      feature_matrix,
-                                                      p=0.0,
-                                                      lbfgs_steps=args.steps,
-                                                      lbfgs_max_attempts=args.attempts),
-                                  JumpParameters(e_corpus.max_len(),
-                                                 f_corpus.max_len(),
-                                                 1.0 / (e_corpus.max_len() + f_corpus.max_len() + 1)))
-    elif args.distortion_type == 'Brown':
-        return BrownLogLinearIBM2(LogLinearParameters(e_corpus.vocab_size(),
-                                                      f_corpus.vocab_size(),
-                                                      weight_vector,
-                                                      feature_matrix,
-                                                      p=0.0,
-                                                      lbfgs_steps=args.steps,
-                                                      lbfgs_max_attempts=args.attempts),
-                                  BrownDistortionParameters(e_corpus.max_len(),
-                                                            1.0 / (e_corpus.max_len())))
-    else:
-        raise ValueError('I do not know this type of parameterisation: %s' % args.distortion_type)
-
-
-def initial_model(e_corpus, f_corpus, model_type, args, initialiser=None):
-    if model_type == 'IBM1':
-        model = get_ibm1(e_corpus, f_corpus, args)
-    elif model_type == 'IBM2':
-        model = get_ibm2(e_corpus, f_corpus, args)
-    elif model_type =='LL-IBM1':
-        model = get_ibm1_loglinear(e_corpus, f_corpus, args)
-    elif model_type == 'LL-IBM2':
-        model = get_ibm2_loglinear(e_corpus, f_corpus, args)
-    else:
-        raise ValueError('I do not know this type of model: %s' % model_type)
-
-    if initialiser is not None:
-        model.initialise(initialiser)
-
-    return model
-
-
-def train_and_apply(e_training, f_training, apply_to, iterations, model_type, args, initialiser=None):
-    logging.info('Starting %d iterations of %s', iterations, model_type)
-    # get an initial model (possibly based on previously trained models)
-    model = initial_model(e_training, f_training, model_type, args, initialiser)
-    # train it with EM for a number of iterations
-    model, training_entropy = hmm0.EM(e_training, f_training, iterations, model)
-
-    if args.save_entropy:  # save the entropy of each EM iteration
-        save_entropy(training_entropy, '{0}/{1}.EM'.format(args.output, model_type))
-
-    if args.save_parameters:
-        logging.info('Saving parameters of %s', model_type)
-        save_model(model, e_training, f_training, '{0}/{1}'.format(args.output, model_type))
-
-    entropies = []
-    # apply model to each parallel corpus
-    for name, e_corpus, f_corpus, ids in apply_to:
-        corpus_entropy = hmm0.empirical_cross_entropy(e_corpus, f_corpus, model)
-
-        entropies.append(corpus_entropy)
-        logging.info('%s %s set perplexity: %f', model_type, name, corpus_entropy)
-
-        if args.viterbi:
-            logging.info('Saving %s Viterbi decisions for %s', model_type, name)
-            # apply model to training data
-            save_viterbi(e_corpus, f_corpus, ids,
-                         model,
-                         '{0}/{1}.{2}.viterbi'.format(args.output, model_type, name),
-                         args)
-
-    return model, entropies
-
-
-def train_and_apply2(e_training, f_training, apply_to, iterations,
+def train_and_apply(e_training, f_training, apply_to, iterations,
                      model: DefaultModel, model_name, args, initialiser=None):
     logging.info('Starting %d iterations of %s', iterations, model_name)
     # train it with EM for a number of iterations
@@ -419,11 +238,11 @@ def train_and_apply2(e_training, f_training, apply_to, iterations,
     return model, entropies
 
 
-def pipeline2(e_training, f_training, apply_to, args):
+def pipeline(e_training, f_training, apply_to, args):
 
-    models, iterations = make_model(args.model, e_training, f_training, args)
+    models, iterations = make_model(args.config, e_training, f_training, args)
     import shutil
-    shutil.copy(args.model, '{0}/model.ini'.format(args.output))
+    shutil.copy(args.config, '{0}/config.ini'.format(args.output))
 
     for i in range(len(models)):
         if i > 0:
@@ -434,68 +253,13 @@ def pipeline2(e_training, f_training, apply_to, args):
         iters = iterations[i]
         logging.info('%d iterations of %s: %s', iters, model_name, models[i])
         # train and update model
-        models[i], entropies = train_and_apply2(e_training,
+        models[i], entropies = train_and_apply(e_training,
                                                 f_training,
                                                 apply_to,
                                                 iters,
                                                 models[i],
                                                 model_name,
                                                 args)
-
-
-def pipeline(e_training, f_training, apply_to, args):
-
-    if args.ibm1 > 0:
-        ibm1, ibm1_entropies = train_and_apply(e_training,
-                                               f_training,
-                                               apply_to,
-                                               args.ibm1,
-                                               'IBM1',
-                                               args)
-
-        # TODO: save IBM1 entropies
-
-    else:
-        ibm1 = None
-
-    if args.ibm2 > 0:
-        initialiser = {}
-        # configure initialisation
-        if ibm1 is not None:
-            initialiser['IBM1'] = ibm1
-
-        ibm2, ibm2_entropies = train_and_apply(e_training,
-                                               f_training,
-                                               apply_to,
-                                               args.ibm2,
-                                               'IBM2',
-                                               args,
-                                               initialiser)
-        # TODO: save IBM2 entropies
-
-    if args.llibm1 > 0:
-        llibm1, llibm1_entropies = train_and_apply(e_training,
-                                               f_training,
-                                               apply_to,
-                                               args.llibm1,
-                                               'LL-IBM1',
-                                               args)
-    else:
-        llibm1 = None
-
-    if args.llibm2 > 0:
-        initialiser = {}
-        # configure initialisation
-        if llibm1 is not None:
-            initialiser['IBM1'] = llibm1
-
-        llibm2, llibm2_entropies = train_and_apply(e_training,
-                                               f_training,
-                                               apply_to,
-                                               args.llibm2,
-                                               'LL-IBM2',
-                                               args,
-                                               initialiser)
 
 
 def main():
@@ -538,7 +302,7 @@ def main():
         e_merged = e_training
         f_merged = f_training
 
-    pipeline2(e_merged, f_merged, apply_to, args)
+    pipeline(e_merged, f_merged, apply_to, args)
 
 
 if __name__ == '__main__':

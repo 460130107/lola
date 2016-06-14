@@ -304,6 +304,23 @@ if __name__ == '__main__':
     F = Corpus('training/example.f')
     E = Corpus('training/example.e', null='<NULL>')
 
+    from lola.ff import WholeWordFeatures, AffixFeatures, CategoryFeatures
+    from lola.ff import extract_lexical_features
+
+    extractors = list()
+    extractors.append(WholeWordFeatures(E, F))
+    extractors.append(AffixFeatures(E, F))
+
+    extractors.append(CategoryFeatures(E, F))
+    for s, (f_snt, e_snt) in enumerate(zip(F.itersentences(), E.itersentences()), 1):
+        for j in range(len(f_snt)):
+            for i in range(len(e_snt)):
+                print('# LEXICAL FEATURES FOR SENTENCE %d AND ALIGNMENT a[%d]=%d' % (s, j + 1, i))
+                for feature in extract_lexical_features(e_snt[i], f_snt[j], extractors):
+                    print(feature)
+
+
+    """
     wfeatures = WordFeatures(E, F)
     afeatures = AlignmentFeatures()
     dfeatures = DistanceFeatures()
@@ -333,3 +350,4 @@ if __name__ == '__main__':
                 for feature in wofeatures.extract(e_snt, f_snt, i, j):
                     print(feature)
                 print()
+    """

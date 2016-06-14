@@ -3,6 +3,8 @@ import numpy as np
 from lola.extractor import LexFeatures
 from lola.corpus import Corpus
 from collections import defaultdict
+from lola.ff import extract_lexical_features
+from lola.ff import LexicalFeatures
 
 
 class FeatureMatrix:
@@ -10,12 +12,12 @@ class FeatureMatrix:
     An initialized feature matrix, on which can be queried.
     """
 
-    def __init__(self, e_corpus, f_corpus, extractor, min_occurences=1, max_occurrences=-1):
+    def __init__(self, e_corpus, f_corpus, extractors: 'list[LexicalFeatures]', min_occurences=1, max_occurrences=-1):
         """
         Initializes a feature matrix class
         :param e_corpus: an instance of Corpus (with NULL tokens)
         :param f_corpus: an instance of Corpus (without NULL tokens)
-        :param extractor: a feature class that inherits the FeatureExtractor
+        :param extractors: a list of extractors of type LexicalFeature
         :param number_of_features: number of unique features
         """
         self.e_vocab_size = e_corpus.vocab_size()
@@ -27,10 +29,9 @@ class FeatureMatrix:
         # we mark a newly created feature with a negative id id and a 0 count
         self._feature_dict = defaultdict(lambda: [-1, 0])
         self._id_to_str = []
-        self._feature_vector, self._max_rows, self._max_cols = self.initialise(e_corpus, f_corpus, extractor)
+        self._feature_vector, self._max_rows, self._max_cols = self.initialise(e_corpus, f_corpus, extractors)
 
-
-    def initialise(self, e_corpus, f_corpus, extractor):
+    def initialise(self, e_corpus, f_corpus, extractors: 'list[LexicalFeatures]'):
         """
         Initializes the feature matrix itself with the following parameters
         :param e_corpus: an instance of Corpus (with NULL tokens)
@@ -54,7 +55,8 @@ class FeatureMatrix:
 
                     if len(e_features) != 0:
                         continue  # we have nothing to do in this case, because this word pair has already been seen
-                    for feature in extractor.extract(e_snt, f_snt, i, j):
+
+                    for feature in extract_lexical_features(e_snt[i], f_snt[j], extractors):
                         # we try to retrieve information about the feature
                         # namely, a tuple containing its id and its count
                         # the count information concerns the whole corpus and is used in order to prune rare features
