@@ -115,51 +115,50 @@ You can repeat extractors of a given type, as long as you name them uniquely, ex
 The second block `[components]` is used to configure locally normalised components of several types.
 Again, you should start by naming a component (e.g. lexical), then separate the name from the configuration with a colon ':'.
 Then, choose the component's type (e.g. BrownLexical).
-Then, choose the first model where this component is added to (starting with 1) using the key `model=`.
-For example, a lexical component is typically added to the first model, which is optimised for a number of iterations of EM.
-Then, a distortion component is typically added to the second model, which is further optimised for a number of iterations of EM.
-This allows us to optimise easier models first and hopefully avoid local optima.
-
 Finally, provide key-value pairs for the configuration of the component.
 
-Examples with multinomial/categorical components:
+Examples of multinomial/categorical components:
 
 
     [components]
-    lexical: type=BrownLexical model=1
-    jump: type=VogelJump model=2
+    lexical: type=BrownLexical
+    udist: type=UniformAlignment
+    jump: type=VogelJump
 
 
-Examples with log-linear components:
+Examples of log-linear components:
 
 
     [components]
-    lexical: type=BrownLexical model=1
-    llLexical: type=LogLinearLexical model=2 init='uniform' sgd-steps=5 sgd-attempts=10 extractors=['categories','words']
-    jump: type=VogelJump model=3
+    llLexical: type=LogLinearLexical init='uniform' sgd-steps=5 sgd-attempts=10 extractors=['categories','words']
 
 
 Note that the log-linear component uses two of the feature extractors declared in the first block.
+Also, log-linear components are optimised by SGD, thus we note some SGD options being configured.
 
 
-## Iterations
+## Models
 
-Finally, the block `[iteration]` is used to specify the number of iterations of EM for each model in order.
+Finally, the block `[models]` is used to specify full models (made of sets of components).
+First, name your model (e.g. ibm1). Then, to define this model, specify a list of unique components with they mandatory keyword 'components='.
+Also, to decide for how long we should optimise this model with EM, specify the mandatory keyword 'iterations='.
 
 Examples:
 
 
-    [iterations]
-    3
-    5
-    10
+    [models]
 
-This means we start with the components in model 1 and run 3 iterations of EM.
-Then, then we add components in model 2 and run 5 iterations of EM.
-Finally, we add components in model 3 and run another 10 iterations of EM.
+    ibm1: iterations=5 components=['lexical','udist']
+    ibm2: iterations=5 components=['lexical','jump']
+
+
+Note that we can have multiple models. They are optimised in the given order (in this case `ibm1` first, then `ibm2`).
+They may reuse certain components, in which case higher models benefit from previously optimised components from lower models.
+In the example, `ibm2` reuses the lexical component previously trained with `ibm1`, but replaces IBM1's uniform distortion by jump-based distortion.
+
 
 # Using config files
 
         
-        python -m lola.aligner training/stdmodel.ini debug/std -f training/example.f -e training/example.e --save-entropy --save-parameters -v
-        python -m lola.aligner training/llmodel.ini debug/LL -f training/example.f -e training/example.e --save-entropy --save-parameters -v
+        python -m lola.aligner training/ibm2.ini debug/ibm2 -f training/example.f -e training/example.e --save-entropy --save-parameters -v
+        python -m lola.aligner training/llibm2.ini debug/llibm2 -f training/example.f -e training/example.e --save-entropy --save-parameters -v

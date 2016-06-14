@@ -1,16 +1,92 @@
 """
 :Authors: - Wilker Aziz
 """
+
 import numpy as np
 import lola.util as util
 from lola.component import LexicalParameters, UniformAlignment, JumpParameters, BrownDistortionParameters
 from lola.log_linear import LogLinearParameters
-from lola.model import DefaultModel
 from lola.feature_vector import FeatureMatrix
-from lola.extractor import LexFeatures
 from lola.corpus import Corpus
-from collections import defaultdict
+from lola.model import DefaultModel
 import logging
+
+
+class ModelSpec:
+    """
+    Model specification e.g. components and number of iterations of EM.
+    """
+
+    def __init__(self, name: str, components: list, iterations: int):
+        self.name = name
+        self.components = tuple(components)
+        self.iterations = iterations
+
+    def __str__(self):
+        return 'Model %s (iterations=%d): %s' % (self.name, self.iterations, ', '.join(self.components))
+
+    def make(self, components) -> DefaultModel:
+        if not all(name in components for name in self.components):
+            raise ValueError('Missing components')
+        return DefaultModel([components[name] for name in self.components])
+
+
+class Config:
+
+    def __init__(self):
+        self._extractors = {}
+        self._components = {}
+        self._models = {}
+        self._order = []
+
+    def components(self):
+        return self._components
+
+    def has_extractor(self, name: str):
+        return name in self._extractors
+
+    def has_component(self, name: str):
+        return name in self._components
+
+    def has_model(self, name: str):
+        return name in self._models
+
+    def add_extractor(self, name: str, extractor):
+        if not self.has_extractor(name):
+            self._extractors[name] = extractor
+        else:
+            raise ValueError('Duplicate extractor name: %s' % name)
+
+    def add_component(self, name: str, component):
+        if not self.has_component(name):
+            self._components[name] = component
+        else:
+            raise ValueError('Duplicate component name: %s' % name)
+
+    def append_model(self, name: str, specs: ModelSpec):
+        if not self.has_model(name):
+            self._models[name] = specs
+            self._order.append(name)
+        else:
+            raise ValueError('Duplicate model name: %s' % name)
+
+    def itermodels(self) -> 'list[ModelSpec]':
+        for name in self._order:
+            yield self._models[name]
+
+    def get_extractor(self, name: str):
+        if name not in self._extractors:
+            raise ValueError('Undeclared extractor: %s' % name)
+        return self._extractors[name]
+
+    def get_component(self, name: str):
+        if name not in self._components:
+            raise ValueError('Undeclared component: %s' % name)
+        return self._components[name]
+
+
+def dummy_action(e_corpus: Corpus, f_corpus: Corpus, args, line: str, i: int, state: Config):
+    pass
 
 
 def read_iteration(line, i, iterations):
@@ -25,66 +101,65 @@ def read_iteration(line, i, iterations):
         raise ValueError('In line %d, expected number of iterations for model %d: %s' % (i, len(iterations) + 1, line))
 
 
-def read_extractor(e_corpus, f_corpus, args, line, i, extractors):
+def read_extractor(e_corpus: Corpus, f_corpus: Corpus, args, line: str, i: int, state: Config):
     try:
         cfg, [name, _] = util.re_sub('^([^:]+)(:)', '', line)
     except:
         raise ValueError('In line %d, expected extractor name: %s' % (i, line))
 
-    if name in extractors:
+    if state.has_extractor(name):
         raise ValueError('Duplicate extractor name in line %d: %s', i, name)
 
     from lola.ff import WholeWordFeatures, AffixFeatures, CategoryFeatures
     cfg, extractor_type = util.re_key_value('type', cfg, optional=False, dtype=str)
 
     if extractor_type == 'WholeWordFeatures':
-        extractors[name] = WholeWordFeatures.construct(e_corpus, f_corpus, cfg)
+        state.add_extractor(name, WholeWordFeatures.construct(e_corpus, f_corpus, cfg))
     elif extractor_type == 'AffixFeatures':
-        extractors[name] = AffixFeatures.construct(e_corpus, f_corpus, cfg)
+        state.add_extractor(name, AffixFeatures.construct(e_corpus, f_corpus, cfg))
     elif extractor_type == 'CategoryFeatures':
-        extractors[name] = CategoryFeatures.construct(e_corpus, f_corpus, cfg)
+        state.add_extractor(name, CategoryFeatures.construct(e_corpus, f_corpus, cfg))
     else:
         raise ValueError('In line %d, got an unknown extractor type: %s' % (i, extractor_type))
 
 
-def read_component(e_corpus, f_corpus, args, line, i, components, specs: defaultdict, extractors: list):
-
+def read_component(e_corpus: Corpus, f_corpus: Corpus, args, line: str, i: int, state: Config):
     try:
         cfg, [name, _] = util.re_sub('^([^:]+)(:)', '', line)
     except:
         raise ValueError('In line %d, expected component name: %s' % (i, line))
 
-    if name in components:
+    if state.has_component(name):
         raise ValueError('Duplicate component name in line %d: %s', i, name)
 
     cfg, component_type = util.re_key_value('type', cfg, optional=False, dtype=str)
-    cfg, model_number = util.re_key_value('model', cfg, optional=False)
-    specs[model_number].append(name)
 
     if component_type == 'BrownLexical':
-        components[name] = LexicalParameters(e_corpus.vocab_size(),
-                                             f_corpus.vocab_size(),
-                                             p=1.0 / f_corpus.vocab_size(),
-                                             name=name)
+        state.add_component(name, LexicalParameters(e_corpus.vocab_size(),
+                                                    f_corpus.vocab_size(),
+                                                    p=1.0 / f_corpus.vocab_size(),
+                                                    name=name))
     elif component_type == 'UniformAlignment':
-        components[name] = UniformAlignment(name=name)
+        state.add_component(name, UniformAlignment(name=name))
     elif component_type == 'VogelJump':
-        components[name] = JumpParameters(e_corpus.max_len(),
-                                          f_corpus.max_len(),
-                                          1.0 / (e_corpus.max_len() + f_corpus.max_len() + 1),
-                                          name=name)
+        state.add_component(name, JumpParameters(e_corpus.max_len(),
+                                                 f_corpus.max_len(),
+                                                 1.0 / (e_corpus.max_len() + f_corpus.max_len() + 1),
+                                                 name=name))
     elif component_type == 'BrownDistortion':
-        components[name] = BrownDistortionParameters(e_corpus.max_len(),
-                                                     1.0 / (e_corpus.max_len()),
-                                                     name=name)
+        state.add_component(name, BrownDistortionParameters(e_corpus.max_len(),
+                                                            1.0 / (e_corpus.max_len()),
+                                                            name=name))
     elif component_type == 'LogLinearLexical':
 
         # get lexical feature extractors
         cfg, lex_extractors_names = util.re_key_value('extractors', cfg, optional=False)
-        try:
-            lex_extractors = [extractors[name] for name in lex_extractors_names]
-        except KeyError:
-            raise ValueError('In line %d, tried to use an undeclared extractor: %s' % (i, lex_extractors_names))
+        lex_extractors = []
+        for extrator_name in lex_extractors_names:
+            if state.has_extractor(extrator_name):
+                lex_extractors.append(state.get_extractor(extrator_name))
+            else:
+                raise ValueError('In line %d, tried to use an undeclared extractor: %s' % (i, extrator_name))
 
         cfg, min_count = util.re_key_value('min-count', cfg, optional=True, default=1)
         cfg, max_count = util.re_key_value('max-count', cfg, optional=True, default=-1)
@@ -109,14 +184,14 @@ def read_component(e_corpus, f_corpus, args, line, i, components, specs: default
         cfg, sgd_attempts = util.re_key_value('sgd-attempts', cfg, optional=True, default=5)
 
         # configure LogLinearParameters
-        components[name] = LogLinearParameters(e_corpus.vocab_size(),
-                                               f_corpus.vocab_size(),
-                                               weight_vector,
-                                               feature_matrix,
-                                               p=0.0,
-                                               lbfgs_steps=sgd_steps,
-                                               lbfgs_max_attempts=sgd_attempts,
-                                               name=name)
+        state.add_component(name, LogLinearParameters(e_corpus.vocab_size(),
+                                                      f_corpus.vocab_size(),
+                                                      weight_vector,
+                                                      feature_matrix,
+                                                      p=0.0,
+                                                      lbfgs_steps=sgd_steps,
+                                                      lbfgs_max_attempts=sgd_attempts,
+                                                      name=name))
     elif component_type == 'LogLinearSuffix':
         pass  # TODO
     elif component_type == 'LogLinearPrefix':
@@ -125,12 +200,36 @@ def read_component(e_corpus, f_corpus, args, line, i, components, specs: default
         raise ValueError('Unkonwn component type in line %d: %s', i, component_type)
 
 
+def read_model(e_corpus: Corpus, f_corpus: Corpus, args, line: str, i: int, state: Config):
+    try:
+        cfg, [name, _] = util.re_sub('^([^:]+)(:)', '', line)
+    except:
+        raise ValueError('In line %d, expected model name: %s' % (i, line))
+
+    if state.has_model(name):
+        raise ValueError('Duplicate model name in line %d: %s', i, name)
+
+    # get components
+    cfg, components_names = util.re_key_value('components', cfg, optional=False)
+    # sanity check
+    for comp_name in components_names:
+        if not state.has_component(comp_name):
+            raise ValueError('In line %d, tried to use an undeclared component: %s' % (i, comp_name))
+    # get number of iterations
+    cfg, iterations = util.re_key_value('iterations', cfg, optional=False)
+
+    # models are "appended" because the order matters
+    state.append_model(name, ModelSpec(name, components_names, iterations))
+
+
 def parse_blocks(e_corpus: Corpus, f_corpus: Corpus, args, istream, first_line):
-    components = {}
-    extractors = {}
-    specs = defaultdict(list)
-    n_iterations = []
-    block_type = None
+    # types of blocks and their parsers
+    header_to_action = {'[components]': read_component,
+                        '[extractors]': read_extractor,
+                        '[models]': read_model}
+    config = Config()
+    action = dummy_action
+
     for i, line in enumerate(istream, first_line):
         if line.startswith('#'):
             continue
@@ -138,45 +237,19 @@ def parse_blocks(e_corpus: Corpus, f_corpus: Corpus, args, istream, first_line):
         if not line:
             continue
 
-        if line == '[components]':
-            block_type = 'components'
-
-        elif line == '[iterations]':
-            block_type = 'iterations'
-
-        elif line == '[extractors]':
-            block_type = 'extractors'
-
+        if line in header_to_action:
+            action = header_to_action[line]
         else:
-            if block_type == 'components':
-                read_component(e_corpus, f_corpus, args, line, i, components, specs, extractors)
-            elif block_type == 'iterations':
-                read_iteration(line, i, n_iterations)
-            elif block_type == 'extractors':
-                read_extractor(e_corpus, f_corpus, args, line, i, extractors)
+            action(e_corpus, f_corpus, args, line, i, config)
 
-    for name, extractor in extractors.items():
-        print(name, extractor)
-
-    return components, specs, n_iterations
+    return config
 
 
-def make_model(path, e_corpus: Corpus, f_corpus: Corpus, args) -> 'list[DefaultModel], list[int]':
+def configure(path, e_corpus: Corpus, f_corpus: Corpus, args) -> Config:
     """
-
     :param path: path to configuration file
-    :return:
+    :return: a Config object
     """
 
     with open(path) as fi:
-        comps, comps_per_model, iterations_per_model = parse_blocks(e_corpus, f_corpus, args, fi, 1)
-        selected = []
-        models = []
-        for m, iterations in enumerate(iterations_per_model, 1):
-            names = comps_per_model[m]
-            # add to the selection
-            selected.extend([comps[name] for name in names])
-            # create a model with the components selected for this round
-            models.append(DefaultModel(selected))
-
-        return models, iterations_per_model
+        return parse_blocks(e_corpus, f_corpus, args, fi, 1)

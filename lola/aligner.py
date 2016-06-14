@@ -13,7 +13,7 @@ from lola.feature_vector import FeatureMatrix
 from lola.extractor import LexFeatures
 from lola.model import save_model
 from functools import partial
-from lola.config import make_model
+from lola.config import configure
 from lola.model import DefaultModel
 
 
@@ -241,26 +241,32 @@ def train_and_apply(e_training, f_training, apply_to, iterations,
 def pipeline(e_training, f_training, apply_to, args):
 
     logging.info('Constructing extractors and components')
-    models, iterations = make_model(args.config, e_training, f_training, args)
+    config = configure(args.config, e_training, f_training, args)
     import shutil
     shutil.copy(args.config, '{0}/config.ini'.format(args.output))
 
-    for i in range(len(models)):
-        if i > 0:
-            # update the components of the current model using the previously trained one
-            models[i].initialise({c.name():c for c in models[i - 1].components()})
-        model_number = i + 1
-        model_name = 'Model%d' % model_number
-        iters = iterations[i]
-        logging.info('%d iterations of %s: %s', iters, model_name, models[i])
-        # train and update model
-        models[i], entropies = train_and_apply(e_training,
+    # we start with all components
+    components = config.components()
+
+    for i, model_spec in enumerate(config.itermodels()):
+        logging.info(str(model_spec))
+
+        # then we make a model based on a certain selection of components
+        model = model_spec.make(components)
+
+        # we optimise this model for a number of EM iterations
+        optimised, entropies = train_and_apply(e_training,
                                                 f_training,
                                                 apply_to,
-                                                iters,
-                                                models[i],
-                                                model_name,
+                                                model_spec.iterations,
+                                                model,
+                                                model_spec.name,
                                                 args)
+
+        # then we update our old components
+        # keeping optimised ones
+        for comp_name, optimised_comp in zip(model_spec.components, optimised):
+            components[comp_name] = optimised_comp
 
 
 def main():
