@@ -309,7 +309,7 @@ if __name__ == '__main__':
 
     extractors = list()
     extractors.append(WholeWordFeatures(E, F))
-    extractors.append(AffixFeatures(E, F))
+    extractors.append(AffixFeatures(E, F, min_e_length=4, min_f_length=4))
 
     extractors.append(CategoryFeatures(E, F))
     for s, (f_snt, e_snt) in enumerate(zip(F.itersentences(), E.itersentences()), 1):

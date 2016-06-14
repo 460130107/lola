@@ -29,6 +29,8 @@ cdef class AffixFeatures(LexicalFeatures):
     cdef:
         list suffix_sizes
         list prefix_sizes
+        size_t min_e_length
+        size_t min_f_length
 
 
 cdef class CategoryFeatures(LexicalFeatures):

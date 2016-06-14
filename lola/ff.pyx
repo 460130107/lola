@@ -94,29 +94,32 @@ cdef class AffixFeatures(LexicalFeatures):
 
     def __init__(self, Corpus e_corpus, Corpus f_corpus,
                  bint extract_e=True, bint extract_f=True, bint extract_ef=True,
-                 list suffix_sizes=[2,3,4], list prefix_sizes=[2,3,4]):
+                 list suffix_sizes=[2,3,4], list prefix_sizes=[2,3,4],
+                 size_t min_e_length=1, size_t min_f_length=1):
         super(AffixFeatures, self).__init__(e_corpus, f_corpus, extract_e, extract_f, extract_ef)
         self.suffix_sizes = list(suffix_sizes)
         self.prefix_sizes = list(prefix_sizes)
+        self.min_e_length = min_e_length
+        self.min_f_length = min_f_length
 
     cpdef list extract(self, int e, int f, list features=[]):
         cdef size_t size
         e_str = self.e_corpus.translate(e)
         f_str = self.f_corpus.translate(f)
 
-        if self.extract_e:
+        if self.extract_e and len(e_str) >= self.min_e_length:
             for size in self.suffix_sizes:
                 features.append('e[j][-%d:]=%s' % (size, e_str[-size:]))
             for size in self.prefix_sizes:
                 features.append('e[j][:%d]=%s' % (size, e_str[:size]))
 
-        if self.extract_f:
+        if self.extract_f and len(f_str) >= self.min_f_length:
             for size in self.suffix_sizes:
                 features.append('f[j][-%d:]=%s' % (size, f_str[-size:]))
             for size in self.prefix_sizes:
                 features.append('f[j][:%d]=%s' % (size, f_str[:size]))
 
-        if self.extract_ef:
+        if self.extract_ef and len(e_str) >= self.min_e_length and len(f_str) >= self.min_f_length:
             for size in self.suffix_sizes:
                 features.append('e[j][-%d:]|f[j][-%d:]=%s|%s' % (size, size, e_str[-size:], f_str[-size:]))
             for size in self.prefix_sizes:
@@ -129,12 +132,14 @@ cdef class AffixFeatures(LexicalFeatures):
         cfg, [extract_e, extract_f, extract_ef] = LexicalFeatures.parse_config(cfg)
         cfg, suffix_sizes = re_key_value('suffix_sizes', cfg, optional=True, default=[])
         cfg, prefix_sizes = re_key_value('prefix_sizes', cfg, optional=True, default=[])
-        return cfg, [extract_e, extract_f, extract_ef, suffix_sizes, prefix_sizes]
+        cfg, min_e_length = re_key_value('min_e_length', cfg, optional=True, default=1)
+        cfg, min_f_length = re_key_value('min_f_length', cfg, optional=True, default=1)
+        return cfg, [extract_e, extract_f, extract_ef, suffix_sizes, prefix_sizes, min_e_length, min_f_length]
 
     @staticmethod
     def construct(Corpus e_corpus, Corpus f_corpus, str cfg):
-        cfg, [extract_e, extract_f, extract_ef, suffix_sizes, prefix_sizes] = AffixFeatures.parse_config(cfg)
-        return AffixFeatures(e_corpus, f_corpus, extract_e, extract_f, extract_ef, suffix_sizes, prefix_sizes)
+        cfg, attrs = AffixFeatures.parse_config(cfg)
+        return AffixFeatures(e_corpus, f_corpus, *attrs)
 
 
 cdef class CategoryFeatures(LexicalFeatures):
