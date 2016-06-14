@@ -37,7 +37,6 @@ def read_extractor(e_corpus, f_corpus, args, line, i, extractors):
     from lola.ff import WholeWordFeatures, AffixFeatures, CategoryFeatures
     cfg, extractor_type = util.re_key_value('type', cfg, optional=False, dtype=str)
 
-
     if extractor_type == 'WholeWordFeatures':
         extractors[name] = WholeWordFeatures.construct(e_corpus, f_corpus, cfg)
     elif extractor_type == 'AffixFeatures':
@@ -89,6 +88,7 @@ def read_component(e_corpus, f_corpus, args, line, i, components, specs: default
         cfg, max_count = util.re_key_value('max-count', cfg, optional=True, default=-1)
 
         # create a feature matrix based on feature extractors and configuration
+        logging.info('Building feature matrix for %s (%s)', name, component_type)
         feature_matrix = FeatureMatrix(e_corpus, f_corpus, lex_extractors,
                                        min_occurences=min_count, max_occurrences=max_count)
 

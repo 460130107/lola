@@ -240,6 +240,7 @@ def train_and_apply(e_training, f_training, apply_to, iterations,
 
 def pipeline(e_training, f_training, apply_to, args):
 
+    logging.info('Constructing extractors and components')
     models, iterations = make_model(args.config, e_training, f_training, args)
     import shutil
     shutil.copy(args.config, '{0}/config.ini'.format(args.output))
