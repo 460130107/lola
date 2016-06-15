@@ -1,6 +1,18 @@
 cimport numpy as np
 import numpy as np
 import logging
+from scipy.sparse import csr_matrix
+
+
+cpdef object csr_expected_difference(matrix, row, probs):
+    cdef:
+        size_t n_rows = matrix.shape[0]
+        size_t n_cols = matrix.shape[1]
+        size_t i
+    u = csr_matrix((1, n_cols))
+    for i in range(n_rows):
+        u += (matrix[i] - row) * probs[i]
+    return u
 
 
 cdef np.float_t[:,::1] make_categoricals(np.float_t[::1] weight_vector,

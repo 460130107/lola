@@ -2,6 +2,9 @@ cimport numpy as np
 from lola.frepr cimport LexicalFeatureMatrix
 
 
+cpdef object csr_expected_difference(matrix, row, probs)
+
+
 cdef class LogisticRegression:
 
     cdef:
