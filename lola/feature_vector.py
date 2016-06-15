@@ -4,7 +4,7 @@ from lola.extractor import LexFeatures
 from lola.corpus import Corpus
 from collections import defaultdict
 from lola.ff import extract_lexical_features
-from lola.ff import LexicalFeatures
+from lola.ff import LexicalFeatureExtractor
 
 
 class FeatureMatrix:
@@ -12,7 +12,7 @@ class FeatureMatrix:
     An initialized feature matrix, on which can be queried.
     """
 
-    def __init__(self, e_corpus, f_corpus, extractors: 'list[LexicalFeatures]', min_occurences=1, max_occurrences=-1):
+    def __init__(self, e_corpus, f_corpus, extractors: 'list[LexicalFeatureExtractor]', min_occurences=1, max_occurrences=-1):
         """
         Initializes a feature matrix class
         :param e_corpus: an instance of Corpus (with NULL tokens)
@@ -31,7 +31,7 @@ class FeatureMatrix:
         self._id_to_str = []
         self._feature_vector, self._max_rows, self._max_cols = self.initialise(e_corpus, f_corpus, extractors)
 
-    def initialise(self, e_corpus, f_corpus, extractors: 'list[LexicalFeatures]'):
+    def initialise(self, e_corpus, f_corpus, extractors: 'list[LexicalFeatureExtractor]'):
         """
         Initializes the feature matrix itself with the following parameters
         :param e_corpus: an instance of Corpus (with NULL tokens)

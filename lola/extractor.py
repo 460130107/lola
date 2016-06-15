@@ -304,14 +304,14 @@ if __name__ == '__main__':
     F = Corpus('training/example.f')
     E = Corpus('training/example.e', null='<NULL>')
 
-    from lola.ff import WholeWordFeatures, AffixFeatures, CategoryFeatures
+    from lola.ff import WholeWordFeatureExtractor, AffixFeatureExtractor, CategoryFeatureExtractor
     from lola.ff import extract_lexical_features
 
     extractors = list()
-    extractors.append(WholeWordFeatures(E, F))
-    extractors.append(AffixFeatures(E, F, min_e_length=4, min_f_length=4))
+    extractors.append(WholeWordFeatureExtractor(E, F))
+    extractors.append(AffixFeatureExtractor(E, F, min_e_length=4, min_f_length=4))
 
-    extractors.append(CategoryFeatures(E, F))
+    extractors.append(CategoryFeatureExtractor(E, F))
     for s, (f_snt, e_snt) in enumerate(zip(F.itersentences(), E.itersentences()), 1):
         for j in range(len(f_snt)):
             for i in range(len(e_snt)):

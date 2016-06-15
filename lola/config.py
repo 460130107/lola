@@ -6,7 +6,8 @@ import numpy as np
 import lola.util as util
 from lola.component import LexicalParameters, UniformAlignment, JumpParameters, BrownDistortionParameters
 from lola.log_linear import LogLinearParameters
-from lola.feature_vector import FeatureMatrix
+from lola.frepr import make_lexical_matrices
+from lola.frepr import LexicalFeatureMatrix
 from lola.corpus import Corpus
 from lola.model import DefaultModel
 import logging
@@ -110,16 +111,14 @@ def read_extractor(e_corpus: Corpus, f_corpus: Corpus, args, line: str, i: int, 
     if state.has_extractor(name):
         raise ValueError('Duplicate extractor name in line %d: %s', i, name)
 
-    from lola.ff import WholeWordFeatures, AffixFeatures, CategoryFeatures
+    # we import the known implementations here
+    from lola.ff import WholeWordFeatureExtractor, AffixFeatureExtractor, CategoryFeatureExtractor
     cfg, extractor_type = util.re_key_value('type', cfg, optional=False, dtype=str)
 
-    if extractor_type == 'WholeWordFeatures':
-        state.add_extractor(name, WholeWordFeatures.construct(e_corpus, f_corpus, cfg))
-    elif extractor_type == 'AffixFeatures':
-        state.add_extractor(name, AffixFeatures.construct(e_corpus, f_corpus, cfg))
-    elif extractor_type == 'CategoryFeatures':
-        state.add_extractor(name, CategoryFeatures.construct(e_corpus, f_corpus, cfg))
-    else:
+    try:
+        implementation = eval(extractor_type)
+        state.add_extractor(name, implementation.construct(e_corpus, f_corpus, cfg))
+    except NameError:
         raise ValueError('In line %d, got an unknown extractor type: %s' % (i, extractor_type))
 
 
@@ -166,10 +165,10 @@ def read_component(e_corpus: Corpus, f_corpus: Corpus, args, line: str, i: int, 
 
         # create a feature matrix based on feature extractors and configuration
         logging.info('Building feature matrix for %s (%s)', name, component_type)
-        feature_matrix = FeatureMatrix(e_corpus, f_corpus, lex_extractors,
-                                       min_occurences=min_count, max_occurrences=max_count)
+        feature_matrix = make_lexical_matrices(e_corpus, f_corpus, lex_extractors,
+                                               min_occurrences=min_count, max_occurrences=max_count)
 
-        dimensionality = feature_matrix.get_feature_size()
+        dimensionality = feature_matrix.dimensionality()
         logging.info('Unique lexical features: %d', dimensionality)
 
         # create an initial parameter vector

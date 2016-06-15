@@ -3,7 +3,7 @@ import re
 from lola.util import re_key_value
 
 
-cdef class LexicalFeatures:
+cdef class LexicalFeatureExtractor:
 
     def __init__(self, Corpus e_corpus, Corpus f_corpus,
                  bint extract_e=True, bint extract_f=True, bint extract_ef=True):
@@ -38,8 +38,8 @@ cdef class LexicalFeatures:
         """
         Construct an instance of the extractor based on a configuration string (and a parallel corpus).
         """
-        cfg, [extract_e, extract_f, extract_ef] = LexicalFeatures.parse_config(cfg)
-        return LexicalFeatures(e_corpus, f_corpus, extract_e, extract_f, extract_ef)
+        cfg, [extract_e, extract_f, extract_ef] = LexicalFeatureExtractor.parse_config(cfg)
+        return LexicalFeatureExtractor(e_corpus, f_corpus, extract_e, extract_f, extract_ef)
 
 
 cpdef list extract_lexical_features(int e, int f, list lexical_extractors):
@@ -50,7 +50,7 @@ cpdef list extract_lexical_features(int e, int f, list lexical_extractors):
     :returns: list of active features
     """
     cdef:
-        LexicalFeatures extractor
+        LexicalFeatureExtractor extractor
         list features = []
 
     for extractor in lexical_extractors:
@@ -59,14 +59,14 @@ cpdef list extract_lexical_features(int e, int f, list lexical_extractors):
     return features
 
 
-cdef class WholeWordFeatures(LexicalFeatures):
+cdef class WholeWordFeatureExtractor(LexicalFeatureExtractor):
     """
     Example class using the word itself as feature only (in both English as French)
     """
 
     def __init__(self, Corpus e_corpus, Corpus f_corpus,
                  bint extract_e=True, bint extract_f=True, bint extract_ef=True):
-        super(WholeWordFeatures, self).__init__(e_corpus, f_corpus, extract_e, extract_f, extract_ef)
+        super(WholeWordFeatureExtractor, self).__init__(e_corpus, f_corpus, extract_e, extract_f, extract_ef)
 
     cpdef list extract(self, int e, int f, list features=[]):
         e_str = self.e_corpus.translate(e)
@@ -81,22 +81,22 @@ cdef class WholeWordFeatures(LexicalFeatures):
 
     @staticmethod
     def parse_config(cfg):
-        cfg, [extract_e, extract_f, extract_ef] = LexicalFeatures.parse_config(cfg)
+        cfg, [extract_e, extract_f, extract_ef] = LexicalFeatureExtractor.parse_config(cfg)
         return cfg, [extract_e, extract_f, extract_ef]
 
     @staticmethod
     def construct(Corpus e_corpus, Corpus f_corpus, str cfg):
-        cfg, [extract_e, extract_f, extract_ef] = WholeWordFeatures.parse_config(cfg)
-        return WholeWordFeatures(e_corpus, f_corpus, extract_e, extract_f, extract_ef)
+        cfg, [extract_e, extract_f, extract_ef] = WholeWordFeatureExtractor.parse_config(cfg)
+        return WholeWordFeatureExtractor(e_corpus, f_corpus, extract_e, extract_f, extract_ef)
 
 
-cdef class AffixFeatures(LexicalFeatures):
+cdef class AffixFeatureExtractor(LexicalFeatureExtractor):
 
     def __init__(self, Corpus e_corpus, Corpus f_corpus,
                  bint extract_e=True, bint extract_f=True, bint extract_ef=True,
                  list suffix_sizes=[2,3,4], list prefix_sizes=[2,3,4],
                  size_t min_e_length=1, size_t min_f_length=1):
-        super(AffixFeatures, self).__init__(e_corpus, f_corpus, extract_e, extract_f, extract_ef)
+        super(AffixFeatureExtractor, self).__init__(e_corpus, f_corpus, extract_e, extract_f, extract_ef)
         self.suffix_sizes = list(suffix_sizes)
         self.prefix_sizes = list(prefix_sizes)
         self.min_e_length = min_e_length
@@ -129,7 +129,7 @@ cdef class AffixFeatures(LexicalFeatures):
 
     @staticmethod
     def parse_config(cfg):
-        cfg, [extract_e, extract_f, extract_ef] = LexicalFeatures.parse_config(cfg)
+        cfg, [extract_e, extract_f, extract_ef] = LexicalFeatureExtractor.parse_config(cfg)
         cfg, suffix_sizes = re_key_value('suffix_sizes', cfg, optional=True, default=[])
         cfg, prefix_sizes = re_key_value('prefix_sizes', cfg, optional=True, default=[])
         cfg, min_e_length = re_key_value('min_e_length', cfg, optional=True, default=1)
@@ -138,15 +138,15 @@ cdef class AffixFeatures(LexicalFeatures):
 
     @staticmethod
     def construct(Corpus e_corpus, Corpus f_corpus, str cfg):
-        cfg, attrs = AffixFeatures.parse_config(cfg)
-        return AffixFeatures(e_corpus, f_corpus, *attrs)
+        cfg, attrs = AffixFeatureExtractor.parse_config(cfg)
+        return AffixFeatureExtractor(e_corpus, f_corpus, *attrs)
 
 
-cdef class CategoryFeatures(LexicalFeatures):
+cdef class CategoryFeatureExtractor(LexicalFeatureExtractor):
 
     def __init__(self, Corpus e_corpus, Corpus f_corpus,
                  bint extract_e=True, bint extract_f=True, bint extract_ef=True):
-        super(CategoryFeatures, self).__init__(e_corpus, f_corpus, extract_e, extract_f, extract_ef)
+        super(CategoryFeatureExtractor, self).__init__(e_corpus, f_corpus, extract_e, extract_f, extract_ef)
         self.digits_re = re.compile('\d')  # check for digits
 
     cpdef list extract(self, int e, int f, list features=[]):
@@ -163,10 +163,10 @@ cdef class CategoryFeatures(LexicalFeatures):
 
     @staticmethod
     def parse_config(cfg):
-        cfg, [extract_e, extract_f, extract_ef] = LexicalFeatures.parse_config(cfg)
+        cfg, [extract_e, extract_f, extract_ef] = LexicalFeatureExtractor.parse_config(cfg)
         return cfg, [extract_e, extract_f, extract_ef]
 
     @staticmethod
     def construct(Corpus e_corpus, Corpus f_corpus, str cfg):
-        cfg, [extract_e, extract_f, extract_ef] = CategoryFeatures.parse_config(cfg)
-        return CategoryFeatures(e_corpus, f_corpus, extract_e, extract_f, extract_ef)
+        cfg, [extract_e, extract_f, extract_ef] = CategoryFeatureExtractor.parse_config(cfg)
+        return CategoryFeatureExtractor(e_corpus, f_corpus, extract_e, extract_f, extract_ef)

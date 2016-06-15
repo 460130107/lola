@@ -6,7 +6,7 @@ from lola.corpus cimport Corpus
 from lola.component cimport GenerativeComponent
 from lola.sparse cimport CPDTable
 
-from lola.feature_vector import FeatureMatrix
+from lola.frepr cimport LexicalFeatureMatrix
 from scipy.optimize import minimize
 import logging
 from lola.gradient import ObjectiveAndGradient
@@ -17,7 +17,7 @@ cdef class LogLinearParameters(GenerativeComponent):  # Component
 
     cdef:
         np.float_t[::1] _weight_vector
-        object _feature_matrix
+        LexicalFeatureMatrix _feature_matrix
         size_t _e_vocab_size
         size_t _f_vocab_size
         int _lbfgs_steps
@@ -28,7 +28,7 @@ cdef class LogLinearParameters(GenerativeComponent):  # Component
     def __init__(self, size_t e_vocab_size,
                  size_t f_vocab_size,
                  np.float_t[::1] weight_vector,
-                 feature_matrix,
+                 LexicalFeatureMatrix feature_matrix,
                  float p=0.0,
                  int lbfgs_steps=3,
                  int lbfgs_max_attempts=5,
@@ -176,4 +176,4 @@ cdef class LogLinearParameters(GenerativeComponent):  # Component
         # and in '{0}.cat'.format(path) the output of logistic regression for every e-f pair
         with open('{0}.{1}'.format(path, self.name()), 'w') as fo:
             for fid, w in enumerate(self._weight_vector):
-                print('{0}\t{1}\t{2}'.format(fid, self._feature_matrix.get_feature_string(fid), w), file=fo)
+                print('{0}\t{1}\t{2}'.format(fid, self._feature_matrix.raw_feature_value(fid), w), file=fo)
