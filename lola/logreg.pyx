@@ -1,5 +1,6 @@
 cimport numpy as np
 import numpy as np
+import logging
 
 
 cdef np.float_t[:,::1] make_categoricals(np.float_t[::1] weight_vector,
@@ -33,10 +34,12 @@ cdef class LogisticRegression:
                  np.float_t[::1] weight_vector,
                  int e_vocab_size,
                  int f_vocab_size):
+        logging.debug('Compiling categoricals')
         self._categoricals = make_categoricals(weight_vector,
                                                feature_matrix,
                                                e_vocab_size,
                                                f_vocab_size)
+        logging.debug('Categoricals compiled')
 
     cpdef float probability(self, int e, int f):
         """

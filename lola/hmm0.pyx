@@ -140,8 +140,6 @@ cpdef float empirical_cross_entropy(Corpus e_corpus, Corpus f_corpus, Generative
             else:
                 log_p_s += c_math.log(p)
         entropy += log_p_s
-        if (s + 1) % 10 == 0:
-            logging.debug('Cross-entropy %d/%d sentences', s + 1, S)
 
     return - entropy / S
 
@@ -246,8 +244,6 @@ cdef SufficientStatistics e_step(Corpus e_corpus, Corpus f_corpus, GenerativeMod
             for i in range(e_snt.shape[0]):
                 suffstats.observation(e_snt, f_snt, i, j, posterior_aj[i]/Z)
 
-        if (s + 1) % 10 == 0:
-            logging.debug('E-step %d/%d sentences', s + 1, S)
     return suffstats
 
 
