@@ -27,7 +27,7 @@ class ObjectiveAndGradient:
         self._e_vocab_size = e_vocab_size
         self._f_vocab_size = f_vocab_size
 
-    def expected_feature_vector(self, e: int, logistic_regression: LogisticRegression) -> csr_matrix:
+    def expected_feature_vector(self, e: int, cpd: csr_matrix) -> csr_matrix:
         """
         calculates expected feature vectors: mu_c = sum_d'(theta(c,d')*f(c,d')) for each context e
         :return: dictionary of expected feature vectors for each context
@@ -35,9 +35,7 @@ class ObjectiveAndGradient:
         #mu = self._feature_matrix.sparse_zero_vec()
         e_matrix = self._feature_matrix.feature_matrix(e)  # each row is the feature representation of a French word
         # mu = F' dot P
-        cpd = logistic_regression.categorical(e)  # each cell is the conditional probability p(f|e)
-        #return csr_matrix(e_matrix.transpose().dot(cpd))
-        return csr_matrix(e_matrix.multiply(np.reshape(cpd, (cpd.shape[0], 1))).sum(0))
+        return cpd * e_matrix
 
     def evaluate(self, weight_vector: np.array, regulariser_strength=0.0) -> tuple:
         """
@@ -56,12 +54,22 @@ class ObjectiveAndGradient:
                                                  weight_vector,
                                                  self._e_vocab_size,
                                                  self._f_vocab_size)
+        logging.debug('Preprocessing CPDs')
+        # TODO: can be faster
+        cpds = [csr_matrix(np.reshape(logistic_regression.categorical(e),
+                                      (1, logistic_regression.categorical(e).shape[0])))
+                for e in range(self._e_vocab_size)]
+        logging.debug('Computing gradient')
+
         gradient = self._feature_matrix.sparse_zero_vec()
         objective = 0.0  # this is the expected log likelihood
         for e in range(self._e_vocab_size):
             logging.debug('Computing expected features for e=%d', e)
-            expected_feature_vector = self.expected_feature_vector(e, logistic_regression)
+            # TODO: fast enough I gues
+            expected_feature_vector = cpds[e] * self._feature_matrix.feature_matrix(e)
+            # self.expected_feature_vector(e, cpds[e])
             logging.debug(' updating gradient')
+            # TODO: too slow! use scipy operations rather than loop
             for f in range(self._f_vocab_size):
                 expected_counts = self._expected_counts.get(e, f)  # expected counts from e-step
                 theta = logistic_regression.probability(e, f)  # theta_c,d(w) for each w (thus theta is a vector w's)
