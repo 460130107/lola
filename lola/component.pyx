@@ -132,7 +132,7 @@ cdef class JumpParameters(DistortionParameters):
         super(JumpParameters, self).__init__(name)
         self._max_english_len = max_english_len
         self._max_french_len = max_french_len
-        self._categorical = SparseCategorical(max_english_len + max_french_len + 1, base_value)
+        self._categorical = SparseCategorical(2*max_english_len  + 1, base_value)
 
     def __str__(self):
         return 'max-english-len=%d max-french-len=%d cpd=(%s)' % (self._max_english_len,

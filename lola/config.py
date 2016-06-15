@@ -143,7 +143,7 @@ def read_component(e_corpus: Corpus, f_corpus: Corpus, args, line: str, i: int, 
     elif component_type == 'VogelJump':
         state.add_component(name, JumpParameters(e_corpus.max_len(),
                                                  f_corpus.max_len(),
-                                                 1.0 / (e_corpus.max_len() + f_corpus.max_len() + 1),
+                                                 1.0 / (2 * e_corpus.max_len() + 1),
                                                  name=name))
     elif component_type == 'BrownDistortion':
         state.add_component(name, BrownDistortionParameters(e_corpus.max_len(),
