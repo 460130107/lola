@@ -24,7 +24,6 @@ cdef class LogLinearParameters(GenerativeComponent):  # Component
         int _lbfgs_steps
         int _lbfgs_max_attempts
         LogisticRegression _logistic_regression
-        CPDTable _cpds
         object _sparse_counts
 
     def __init__(self, size_t e_vocab_size,
@@ -40,14 +39,14 @@ cdef class LogLinearParameters(GenerativeComponent):  # Component
         self._feature_matrix = feature_matrix  # dok matrix for each decision (context x features)
         self._e_vocab_size = e_vocab_size
         self._f_vocab_size = f_vocab_size
-        self._cpds = CPDTable(e_vocab_size, f_vocab_size, p)  # expected counts
+        self._sparse_counts = lil_matrix((e_vocab_size, f_vocab_size))  # expected counts
         self._logistic_regression = LogisticRegression(feature_matrix,
                                                        weight_vector,
                                                        e_vocab_size,
                                                        f_vocab_size)
         self._lbfgs_steps = lbfgs_steps
         self._lbfgs_max_attempts = lbfgs_max_attempts
-        self._sparse_counts = lil_matrix((e_vocab_size, f_vocab_size))
+
 
     @cython.nonecheck(False)
     @cython.boundscheck(False)
@@ -93,7 +92,7 @@ cdef class LogLinearParameters(GenerativeComponent):  # Component
         :return:
         """
         self._sparse_counts[e_snt[i], f_snt[j]] += p
-        return self._cpds.plus_equals(e_snt[i], f_snt[j], p)
+        return self._sparse_counts[e_snt[i], f_snt[j]]
 
     cpdef normalise(self):
         """
@@ -126,7 +125,7 @@ cdef class LogLinearParameters(GenerativeComponent):  # Component
             nonlocal f_calls
             f_calls += 1
             logging.info('[%d] Computing objective and gradient [%d]', iteration, f_calls)
-            loglikelihood = ObjectiveAndGradient(self._cpds, self._sparse_counts, self._feature_matrix,
+            loglikelihood = ObjectiveAndGradient(self._sparse_counts, self._feature_matrix,
                                  self._e_vocab_size,
                                  self._f_vocab_size)
             # in this function we change the logic from maximisation to minimisation
@@ -134,7 +133,7 @@ cdef class LogLinearParameters(GenerativeComponent):  # Component
             logging.info('[%d] Objective [%d] %f', iteration, f_calls, objective)
             objective *= -1
             gradient *= -1
-            return objective, gradient.A[0]  # matrix to standard np.array
+            return objective, gradient
 
         def callback(w):
             nonlocal iteration

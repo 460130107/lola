@@ -5,76 +5,32 @@
 import numpy as np
 cimport numpy as np
 import scipy as sp
-from lola.sparse cimport CPDTable
 from lola.frepr cimport LexicalFeatureMatrix
 from lola.logreg cimport LogisticRegression
-
 from scipy.sparse import csr_matrix
-import logging
-
-from time import time
-
-
-cpdef object csr_expected_difference(matrix, row, probs):
-    cdef:
-        size_t n_rows = matrix.shape[0]
-        size_t n_cols = matrix.shape[1]
-        size_t i
-        np.float_t[::1] m_probs = probs
-    u = csr_matrix((1, n_cols))
-    for i in range(n_rows):
-        u += (matrix[i] - row) * m_probs[i]
-    return u
-
-
-cpdef object dense_expected_difference(matrix, row, probs):
-    cdef:
-        size_t n_rows = matrix.shape[0]
-        size_t n_cols = matrix.shape[1]
-        size_t i
-        np.float_t[::1] m_probs = probs
-        np.float_t[::1] drow = row.A[0]
-    u = probs.dot(matrix - row.todense())
-    #u = np.zeros(n_cols)
-    #for i in range(n_rows):
-    #    u += (matrix[i].A[0] - drow) * m_probs[i]
-    return u
 
 
 cdef class ObjectiveAndGradient:
 
     cdef:
-        CPDTable _expected_counts
         LexicalFeatureMatrix _feature_matrix
         size_t _e_vocab_size
         size_t _f_vocab_size
-        object _sparse_counts
+        object _sparse_expected_counts
 
-    def __init__(self, CPDTable expected_counts, sparse_counts,
+    def __init__(self, sparse_counts,
                  LexicalFeatureMatrix feature_matrix,
                  size_t e_vocab_size,
                  size_t f_vocab_size):
         """
 
-        :param expected_counts: this is the result of the E-step (that is, the
+        :param sparse_counts: this is the result of the E-step (that is, the
             part that remains unchanged during the M-step)
         """
-
-        self._expected_counts = expected_counts
         self._feature_matrix = feature_matrix
         self._e_vocab_size = e_vocab_size
         self._f_vocab_size = f_vocab_size
-        self._sparse_counts = csr_matrix(sparse_counts)
-
-    cdef expected_feature_vector(self, int e, cpd):
-        """
-        calculates expected feature vectors: mu_c = sum_d'(theta(c,d')*f(c,d')) for each context e
-        :return: dictionary of expected feature vectors for each context
-        """
-        #mu = self._feature_matrix.sparse_zero_vec()
-        e_matrix = self._feature_matrix.feature_matrix(e)  # each row is the feature representation of a French word
-        # mu = F' dot P
-        return cpd * e_matrix
+        self._sparse_expected_counts = csr_matrix(sparse_counts)
 
     cpdef evaluate(self, weight_vector, regulariser_strength=0.0):
         """
@@ -93,12 +49,6 @@ cdef class ObjectiveAndGradient:
                                                  weight_vector,
                                                  self._e_vocab_size,
                                                  self._f_vocab_size)
-        logging.debug('Preprocessing CPDs')
-        # TODO: can be faster
-        expected_counts = np.array([np.array([self._expected_counts.get(e, f)
-                                              for f in range(self._f_vocab_size)])
-                                    for e in range(self._e_vocab_size)])
-        logging.debug('Computing gradient')
 
         gradient = sp.matrix(np.zeros(self._feature_matrix.dimensionality()))
         objective = 0.0
@@ -138,28 +88,15 @@ cdef class ObjectiveAndGradient:
             # slow_update = expected_counts[e].dot(self._feature_matrix.feature_matrix(e) - d_expected_feature_vector)
 
             # much faster version
-            #t0 = time()
-            update = self._feature_matrix.feature_matrix(e).T * expected_counts[e] - mu_e * expected_counts[e].sum()
-            #print('update1', time() - t0)
-
-            # Consider this with sparse counts
-            #t0 = time()
-            #update2 = self._sparse_counts[e].dot(self._feature_matrix.feature_matrix(e)) - mu_e * self._sparse_counts[e].sum()
-            #print('update2', time() - t0)
-
-
-            #for a, b in zip(update, update2):
-            #    if not np.allclose([a], [b]):
-            #        print('diff', a,b, a-b)
-            #assert np.allclose(update, update2.A[0]), 'Oops'
+            update = self._sparse_expected_counts[e].dot(self._feature_matrix.feature_matrix(e)) - mu_e * self._sparse_expected_counts[e].sum()
 
             gradient += update
 
             # This is the expected log-likelihood
-            objective += np.dot(expected_counts[e], np.log(logistic_regression.categorical(e)))
+            objective += self._sparse_expected_counts[e].dot(np.log(logistic_regression.categorical(e)))[0]  # matrix (1,) -> scalar
 
         # if regulariser_strength != 0.0:
         #   objective -= regulariser_strength * squared(l2_norm(w))
         #   gradient -= 2 * regulariser_strength * w
 
-        return objective, gradient
+        return objective, gradient.A[0]  # matrix to standard np.array
