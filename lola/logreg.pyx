@@ -22,6 +22,7 @@ cdef np.float_t[:,::1] make_categoricals(np.float_t[::1] weight_vector,
     return numerators / denominators[:,np.newaxis]
 
 
+
 cdef class LogisticRegression:
     """"
     This class deals with the computation of categorical parameters

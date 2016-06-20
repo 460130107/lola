@@ -6,6 +6,13 @@ import numpy as np
 cimport numpy as np
 cimport cython
 from libc cimport math as c_math
+from lola.event cimport Context
+from lola.event cimport Decision
+from lola.event cimport EventSpace
+from lola.event cimport LexEventSpace
+from lola.event cimport JumpEventSpace
+from lola.event cimport DistEventSpace
+
 
 cdef class GenerativeComponent:
 
@@ -14,6 +21,12 @@ cdef class GenerativeComponent:
 
     cpdef str name(self):
         return self._name
+
+    cpdef Event describe(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
+        pass
+
+    cpdef EventSpace event_space(self):
+        pass
 
     cpdef float get(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
         """Get the component value associated with a decision a_j=i."""
@@ -59,12 +72,19 @@ cdef class LexicalParameters(GenerativeComponent):
         self._e_vocab_size = e_vocab_size
         self._f_vocab_size = f_vocab_size
         self._cpds = CPDTable(e_vocab_size, f_vocab_size, p)
+        self._event_space = LexEventSpace(e_vocab_size, f_vocab_size)
 
     cpdef size_t e_vocab_size(self):
         return self._e_vocab_size
 
     cpdef size_t f_vocab_size(self):
         return self._f_vocab_size
+
+    cpdef Event describe(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
+        return self._event_space.get(e_snt, f_snt, i, j)
+
+    cpdef EventSpace event_space(self):
+        return self._event_space
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
@@ -105,6 +125,12 @@ cdef class UniformAlignment(DistortionParameters):
     def __init__(self, str name='uniformdist'):
         super(UniformAlignment, self).__init__(name)
 
+    cpdef Event describe(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
+        return Event(Context(0), Decision(0))
+
+    cpdef EventSpace event_space(self):
+        return EventSpace()
+
     @cython.cdivision(True)
     cpdef float get(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
         """
@@ -133,11 +159,18 @@ cdef class JumpParameters(DistortionParameters):
         self._max_english_len = max_english_len
         self._max_french_len = max_french_len
         self._categorical = SparseCategorical(2*max_english_len  + 1, base_value)
+        self._event_space = JumpEventSpace(max_english_len)
 
     def __str__(self):
         return 'max-english-len=%d max-french-len=%d cpd=(%s)' % (self._max_english_len,
                                                                   self._max_french_len,
                                                                   self._categorical)
+
+    cpdef Event describe(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
+        return self._event_space.get(e_snt, f_snt, i, j)
+
+    cpdef EventSpace event_space(self):
+        return self._event_space
 
     @cython.cdivision(True)
     cdef int jump(self, int l, int m, int i, int j):
@@ -150,7 +183,7 @@ cdef class JumpParameters(DistortionParameters):
         :param j: 0-based French word position
         :return: i - floor((j + 1) * l / m)
         """
-        return i - <int>c_math.floor((j + 1) * l / m)
+        return i - <int>c_math.floor(float((j + 1) * l) / m)
 
     cpdef int max_english_len(self):
         return self._max_english_len
@@ -198,12 +231,19 @@ cdef class BrownDistortionParameters(DistortionParameters):
         self._max_english_len = max_english_len
         self._base_value = base_value
         self._cpds = dict()
+        self._event_space = DistEventSpace(max_english_len)
 
     cpdef int max_english_len(self):
         return self._max_english_len
 
     cpdef float base_value(self):
         return self._base_value
+
+    cpdef Event describe(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
+        return self._event_space.get(e_snt, f_snt, i, j)
+
+    cpdef EventSpace event_space(self):
+        return self._event_space
 
     cpdef float get(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
         """

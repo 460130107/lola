@@ -66,10 +66,14 @@ cdef class Feature:
     This object simply represents a feature, it has an id, a global count, and a value.
     """
 
-    def __init__(self, int id=-1, int count=0, object value=None):
+    def __init__(self, int id=-1, int count=0, object value=None, str parent=''):
         self.id = id
         self.count = count
         self.value = value
+        self.parent = parent
+
+    def __str__(self):
+        return '{0}::{1}'.format(self.parent, self.value)
 
 
 cdef object convert_to_csr(feature_dict, size_t max_rows, size_t max_columns):
@@ -185,4 +189,5 @@ cpdef LexicalFeatureMatrix make_lexical_matrices(Corpus e_corpus,
         word_pair_features[e] = convert_to_csr(word_pair_features[e], r, d)
     # when we get here, we will have converted all (python) dictionary of features to (scipy) csr_matrix objects
     return LexicalFeatureMatrix(word_pair_features, reverse_feature_index, d)
+
 

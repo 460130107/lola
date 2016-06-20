@@ -41,6 +41,7 @@ cdef class Feature:
         int id
         int count
         object value
+        str parent
 
 
 cpdef LexicalFeatureMatrix make_lexical_matrices(Corpus e_corpus,

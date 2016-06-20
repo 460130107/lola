@@ -1,6 +1,7 @@
 from lola.corpus cimport Corpus
 import re
 from lola.util import re_key_value
+cimport numpy as np
 
 
 cdef class LexicalFeatureExtractor:
@@ -170,3 +171,4 @@ cdef class CategoryFeatureExtractor(LexicalFeatureExtractor):
     def construct(Corpus e_corpus, Corpus f_corpus, str cfg):
         cfg, [extract_e, extract_f, extract_ef] = CategoryFeatureExtractor.parse_config(cfg)
         return CategoryFeatureExtractor(e_corpus, f_corpus, extract_e, extract_f, extract_ef)
+
