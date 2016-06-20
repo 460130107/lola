@@ -53,6 +53,12 @@ cdef class LexDecision(Decision):
         return self.id
 
 
+cdef class LexEvent(Event):
+
+    def __init__(self, LexContext context, LexDecision decision):
+        super(LexEvent, self).__init__(context, decision)
+
+
 cdef class LexEventSpace(EventSpace):
 
     def __init__(self, size_t e_vocab_size, size_t f_vocab_size):
@@ -61,7 +67,7 @@ cdef class LexEventSpace(EventSpace):
         self._decisions = [LexDecision(f) for f in range(f_vocab_size)]
 
     cpdef Event get(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
-        return Event(LexContext(e_snt[i]), LexDecision(f_snt[j]))
+        return LexEvent(self._contexts[e_snt[i]], self._decisions[f_snt[j]])
 
     cpdef size_t n_contexts(self):
         return len(self._contexts)
@@ -86,6 +92,12 @@ cdef class JumpDecision(Decision):
         return self._jump
 
 
+cdef class JumpEvent(Event):
+
+    def __init__(self, JumpContext context, JumpDecision decision):
+        super(JumpEvent, self).__init__(context, decision)
+
+
 cdef class JumpEventSpace(EventSpace):
 
     def __init__(self, max_english_length):
@@ -97,7 +109,7 @@ cdef class JumpEventSpace(EventSpace):
             size_t l = e_snt.shape[0]
             size_t m = f_snt.shape[0]
             int jump = i - <int>floor(float(j * l) / m)
-        return Event(self._context, self._decisions[jump])
+        return JumpEvent(self._context, self._decisions[jump])
 
     cpdef size_t n_contexts(self):
         return 1
@@ -124,6 +136,12 @@ cdef class DistDecision(Decision):
         return self.id
 
 
+cdef class DistEvent(Event):
+
+    def __init__(self, DistContext context, DistDecision decision):
+        super(DistEvent, self).__init__(context, decision)
+
+
 cdef class DistEventSpace(EventSpace):
 
     def __init__(self, size_t max_english_length):
@@ -140,7 +158,7 @@ cdef class DistEventSpace(EventSpace):
             context = DistContext(len(self._contexts), j, l, m)
             self._contexts[ctxt_key] = context
         cdef DistDecision decision = self._decisions[i]
-        return Event(context, decision)
+        return DistEvent(context, decision)
 
     cpdef size_t n_contexts(self):
         return len(self._contexts)

@@ -1,12 +1,9 @@
 from lola.corpus cimport Corpus
-from lola.component cimport GenerativeComponent
 from lola.event cimport Event
-from lola.event cimport EventSpace
-from lola.event cimport LexEvent
-from lola.event cimport JumpEvent
+from lola.ff cimport FeatureExtractor
 cimport numpy as np
 
-from collections import defaultdict
+from collections import defaultdict, deque
 from scipy.sparse import dok_matrix
 from scipy.sparse import csr_matrix
 import numpy as np
@@ -25,38 +22,6 @@ cdef class Feature:
 
     def __str__(self):
         return '{0}::{1}'.format(self.parent, self.value)
-
-
-cdef class FeatureExtractor:
-
-    cpdef list extract(self, Event event, list features=[]):
-        return features
-
-    cpdef str name(self):
-        return 'FeatureExtractor'
-
-
-cdef class JumpExtractor:
-
-    def __init__(self, str name='JumpExtractor'):
-        self._name = name
-
-    cpdef str name(self):
-        return self._name
-
-    cpdef list extract(self, Event event, list features=[]):
-        if not isinstance(event, JumpEvent):
-            raise ValueError('Expected a JumpEvent, got %s' % type(event))
-
-        cdef JumpEvent x = <JumpEvent>event
-        features.append('i=%d' % x.i)
-        features.append('j=%d' % x.j)
-        features.append('i>j=%s' % (x.i > x.j))
-        features.append('i==j=%s' % (x.i == x.j))
-        features.append('i-j=%s' % (x.i - x.j))
-        features.append('jump=%s' % x.jump())
-
-        return features
 
 
 cdef class FeatureMatrix:
@@ -138,7 +103,6 @@ cdef object convert_to_csr(feature_dict, size_t max_rows, size_t max_columns):
     """
     cdef:
         int f
-        list features
         Feature feature
     # dok_matrix are good for constructing sparse matrices
     dok = dok_matrix((max_rows, max_columns), dtype=int)
@@ -150,8 +114,7 @@ cdef object convert_to_csr(feature_dict, size_t max_rows, size_t max_columns):
     return dok.tocsr()
 
 
-
-cpdef FeatureMatrix make_feature_matrices(GenerativeComponent component,
+cpdef FeatureMatrix make_feature_matrices(EventSpace event_space,
                                           Corpus e_corpus,
                                           Corpus f_corpus,
                                           extractors,
@@ -171,38 +134,43 @@ cpdef FeatureMatrix make_feature_matrices(GenerativeComponent component,
         size_t s
         np.int_t[::1] e_snt, f_snt
         size_t i, j
-        int e_i, f_j
-        EventSpace event_space = component.event_space()
         Event event
         Feature feature
         FeatureExtractor extractor
         list reverse_feature_index = []
-        list word_pair_features = [defaultdict(list) for _ in range(e_corpus.vocab_size())]
-        list fvecs = [defaultdict(list) for _ in range(event_space.n_contexts())]
-        object feature_repo = defaultdict(Feature)  # repository of features
+        list values
+        #object feature_repo = defaultdict(Feature)  # repository of features
+        list feature_repo = [defaultdict(Feature) for _ in extractors]
+
+    fvecs = deque([defaultdict(deque) for _ in range(event_space.n_contexts())])
 
     # Loop over all sentence pairs gathering features for word pairs
     for s in range(S):
         e_snt = e_corpus.sentence(s)
         f_snt = f_corpus.sentence(s)
-
         # Loop over all words pairs in the sentence pairs
         for i in range(e_snt.shape[0]):
 
             for j in range(f_snt.shape[0]):
-
-                event = component.describe(e_snt, f_snt, i, j)
+                # get an event
+                event = event_space.get(e_snt, f_snt, i, j)
+                # maintain fvecs
+                if event.context.id >= len(fvecs):
+                    fvecs.append(defaultdict(deque))  # sometimes we need discover contexts we could not have anticipated
                 fvec = fvecs[event.context.id][event.decision.id]
+
                 # then we featurise it if not yet done
-                if fvec:  # already described
+                if len(fvec) > 0:  # already described
                     continue
                 # extract features
-                for extractor in extractors:
-                    for raw_feature_value in extractor.extract(event):
+                for th, extractor in enumerate(extractors):
+                    values = []
+                    extractor.extract(event, values)
+                    for raw_feature_value in values:
                         # we try to retrieve information about the feature
                         # namely, a tuple containing its id and its count
                         # the count information concerns the whole corpus and is used in order to prune rare features
-                        feature = feature_repo['{0}::{1}'.format(extractor.name(), raw_feature_value)]
+                        feature = feature_repo[th][raw_feature_value]
                         if feature.id == -1:  # we haven't yet seen this feature
                             # thus we update its id and value
                             feature.id = n_features
@@ -243,8 +211,6 @@ cpdef FeatureMatrix make_feature_matrices(GenerativeComponent component,
     # now we can construct csr_matrix objects
     # for each English word e we have one csr_matrix where
     # each row represents a French word f and each column represents a feature phi relating e and f
-    matrices = []
-    for ctxt, dec2fvec in fvecs.items():
-            matrices[ctxt] = convert_to_csr(dec2fvec, r, d)
+    matrices = [convert_to_csr(fvecs[ctxt], r, d) for ctxt in range(event_space.n_contexts())]
     # when we get here, we will have converted all (python) dictionary of features to (scipy) csr_matrix objects
     return FeatureMatrix(matrices, reverse_feature_index, d)

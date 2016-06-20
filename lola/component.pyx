@@ -6,8 +6,6 @@ import numpy as np
 cimport numpy as np
 cimport cython
 from libc cimport math as c_math
-from lola.event cimport Context
-from lola.event cimport Decision
 from lola.event cimport EventSpace
 from lola.event cimport LexEventSpace
 from lola.event cimport JumpEventSpace
@@ -21,9 +19,6 @@ cdef class GenerativeComponent:
 
     cpdef str name(self):
         return self._name
-
-    cpdef Event describe(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
-        pass
 
     cpdef EventSpace event_space(self):
         pass
@@ -80,9 +75,6 @@ cdef class LexicalParameters(GenerativeComponent):
     cpdef size_t f_vocab_size(self):
         return self._f_vocab_size
 
-    cpdef Event describe(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
-        return self._event_space.get(e_snt, f_snt, i, j)
-
     cpdef EventSpace event_space(self):
         return self._event_space
 
@@ -120,13 +112,11 @@ cdef class DistortionParameters(GenerativeComponent):
 
     pass
 
+
 cdef class UniformAlignment(DistortionParameters):
 
     def __init__(self, str name='uniformdist'):
         super(UniformAlignment, self).__init__(name)
-
-    cpdef Event describe(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
-        return Event(Context(0), Decision(0))
 
     cpdef EventSpace event_space(self):
         return EventSpace()
@@ -165,9 +155,6 @@ cdef class JumpParameters(DistortionParameters):
         return 'max-english-len=%d max-french-len=%d cpd=(%s)' % (self._max_english_len,
                                                                   self._max_french_len,
                                                                   self._categorical)
-
-    cpdef Event describe(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
-        return self._event_space.get(e_snt, f_snt, i, j)
 
     cpdef EventSpace event_space(self):
         return self._event_space
@@ -238,9 +225,6 @@ cdef class BrownDistortionParameters(DistortionParameters):
 
     cpdef float base_value(self):
         return self._base_value
-
-    cpdef Event describe(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
-        return self._event_space.get(e_snt, f_snt, i, j)
 
     cpdef EventSpace event_space(self):
         return self._event_space

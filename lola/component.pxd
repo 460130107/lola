@@ -2,7 +2,6 @@ cimport numpy as np
 from lola.corpus cimport Corpus
 from lola.sparse cimport SparseCategorical
 from lola.sparse cimport CPDTable
-from lola.event cimport Event
 from lola.event cimport EventSpace
 from lola.event cimport LexEventSpace
 from lola.event cimport JumpEventSpace
@@ -14,8 +13,6 @@ cdef class GenerativeComponent:
     cdef str _name
 
     cpdef str name(self)
-
-    cpdef Event describe(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j)
 
     cpdef EventSpace event_space(self)
 

@@ -5,12 +5,15 @@
 import numpy as np
 import lola.util as util
 from lola.component import LexicalParameters, UniformAlignment, JumpParameters, BrownDistortionParameters
-from lola.log_linear import LogLinearParameters
-from lola.frepr import make_lexical_matrices
-from lola.frepr import LexicalFeatureMatrix
+from lola.llcomp import LogLinearComponent
+from lola.event import LexEventSpace
+from lola.event import JumpEventSpace
+from lola.event import DistEventSpace
+from lola.fmatrix import make_feature_matrices
 from lola.corpus import Corpus
 from lola.model import DefaultModel
 import logging
+from lola.ff import LexicalFeatureExtractor, JumpFeatureExtractor, DistortionFeatureExtractor
 
 
 class ModelSpec:
@@ -86,6 +89,62 @@ class Config:
         return self._components[name]
 
 
+def make_loglinear_component(e_corpus: Corpus, f_corpus: Corpus, component_type: str, name: str, cfg: str, state: Config, line_number: int):
+    if component_type == 'LogLinearLexical':
+        event_space = LexEventSpace(e_corpus.vocab_size(), f_corpus.vocab_size())
+        supported_extractor = LexicalFeatureExtractor
+    elif component_type == 'LogLinearJump':
+        event_space = JumpEventSpace(e_corpus.max_len())
+        supported_extractor = JumpFeatureExtractor
+    elif component_type == 'LogLinearDistortion':
+        event_space = DistEventSpace(e_corpus.max_len())
+        supported_extractor = DistortionFeatureExtractor
+    else:
+        raise ValueError('Unknown component type: %s' % component_type)
+
+    # get lexical feature extractors
+    cfg, extractor_names = util.re_key_value('extractors', cfg, optional=False)
+    extractors = []
+    for extrator_name in extractor_names:
+        if state.has_extractor(extrator_name):
+            extractor = state.get_extractor(extrator_name)
+            if not isinstance(extractor, supported_extractor):
+                raise ValueError('%s component only takes extractors of type %s, got %s' % (component_type, supported_extractor, type(extractor)))
+            extractors.append(extractor)
+        else:
+            raise ValueError('In line %d, tried to use an undeclared extractor: %s' % (line_number, extrator_name))
+
+    cfg, min_count = util.re_key_value('min-count', cfg, optional=True, default=1)
+    cfg, max_count = util.re_key_value('max-count', cfg, optional=True, default=-1)
+
+    # create a feature matrix based on feature extractors and configuration
+    logging.info('Building feature matrix for %s (%s)', name, component_type)
+    feature_matrix = make_feature_matrices(event_space, e_corpus, f_corpus, extractors,
+                                           min_occurrences={}, max_occurrences={})
+
+    dimensionality = feature_matrix.dimensionality()
+    logging.info('Unique lexical features: %d', dimensionality)
+
+    # create an initial parameter vector
+    cfg, init_option = util.re_key_value('init', cfg, optional=True, default='normal')
+    if init_option == 'uniform':
+        weight_vector = np.full(dimensionality, 1.0 / dimensionality, dtype=np.float)
+    else:  # random initialisation from a normal distribution with mean 0 and var 1.0
+        weight_vector = np.random.normal(0, 1.0, dimensionality)
+
+    # configure SGD
+    cfg, sgd_steps = util.re_key_value('sgd-steps', cfg, optional=True, default=3)
+    cfg, sgd_attempts = util.re_key_value('sgd-attempts', cfg, optional=True, default=5)
+
+    # configure LogLinearParameters
+    state.add_component(name, LogLinearComponent(weight_vector,
+                                                 feature_matrix,
+                                                 event_space,
+                                                 lbfgs_steps=sgd_steps,
+                                                 lbfgs_max_attempts=sgd_attempts,
+                                                 name=name))
+
+
 def dummy_action(e_corpus: Corpus, f_corpus: Corpus, args, line: str, i: int, state: Config):
     pass
 
@@ -112,7 +171,7 @@ def read_extractor(e_corpus: Corpus, f_corpus: Corpus, args, line: str, i: int, 
         raise ValueError('Duplicate extractor name in line %d: %s', i, name)
 
     # we import the known implementations here
-    from lola.ff import WholeWordFeatureExtractor, AffixFeatureExtractor, CategoryFeatureExtractor
+    from lola.ff import WholeWordFeatureExtractor, AffixFeatureExtractor, CategoryFeatureExtractor, JumpFeatureExtractor
     cfg, extractor_type = util.re_key_value('type', cfg, optional=False, dtype=str)
 
     try:
@@ -149,54 +208,8 @@ def read_component(e_corpus: Corpus, f_corpus: Corpus, args, line: str, i: int, 
         state.add_component(name, BrownDistortionParameters(e_corpus.max_len(),
                                                             1.0 / (e_corpus.max_len()),
                                                             name=name))
-    elif component_type == 'LogLinearLexical':
-
-        # get lexical feature extractors
-        cfg, lex_extractors_names = util.re_key_value('extractors', cfg, optional=False)
-        lex_extractors = []
-        for extrator_name in lex_extractors_names:
-            if state.has_extractor(extrator_name):
-                lex_extractors.append(state.get_extractor(extrator_name))
-            else:
-                raise ValueError('In line %d, tried to use an undeclared extractor: %s' % (i, extrator_name))
-
-        cfg, min_count = util.re_key_value('min-count', cfg, optional=True, default=1)
-        cfg, max_count = util.re_key_value('max-count', cfg, optional=True, default=-1)
-
-        # create a feature matrix based on feature extractors and configuration
-        logging.info('Building feature matrix for %s (%s)', name, component_type)
-        feature_matrix = make_lexical_matrices(e_corpus, f_corpus, lex_extractors,
-                                               min_occurrences=min_count, max_occurrences=max_count)
-
-        dimensionality = feature_matrix.dimensionality()
-        logging.info('Unique lexical features: %d', dimensionality)
-
-        # create an initial parameter vector
-        cfg, init_option = util.re_key_value('init', cfg, optional=True, default='normal')
-        if init_option == 'uniform':
-            weight_vector = np.full(dimensionality, 1.0 / dimensionality, dtype=np.float)
-        else:  # random initialisation from a normal distribution with mean 0 and var 1.0
-            weight_vector = np.random.normal(0, 1.0, dimensionality)
-
-        # configure SGD
-        cfg, sgd_steps = util.re_key_value('sgd-steps', cfg, optional=True, default=3)
-        cfg, sgd_attempts = util.re_key_value('sgd-attempts', cfg, optional=True, default=5)
-
-        # configure LogLinearParameters
-        state.add_component(name, LogLinearParameters(e_corpus.vocab_size(),
-                                                      f_corpus.vocab_size(),
-                                                      weight_vector,
-                                                      feature_matrix,
-                                                      p=0.0,
-                                                      lbfgs_steps=sgd_steps,
-                                                      lbfgs_max_attempts=sgd_attempts,
-                                                      name=name))
-    elif component_type == 'LogLinearSuffix':
-        pass  # TODO
-    elif component_type == 'LogLinearPrefix':
-        pass  # TODO
     else:
-        raise ValueError('Unkonwn component type in line %d: %s', i, component_type)
+        make_loglinear_component(e_corpus, f_corpus, component_type, name, cfg, state, i)
 
 
 def read_model(e_corpus: Corpus, f_corpus: Corpus, args, line: str, i: int, state: Config):

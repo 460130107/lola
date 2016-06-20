@@ -1,8 +1,18 @@
 from lola.corpus cimport Corpus
+from lola.event cimport Event
 import re
 
 
-cdef class LexicalFeatureExtractor:
+cdef class FeatureExtractor:
+
+    cdef str _name
+
+    cpdef list extract(self, Event event, list features=?)
+
+    cpdef str name(self)
+
+
+cdef class LexicalFeatureExtractor(FeatureExtractor):
 
     cdef:
         Corpus e_corpus
@@ -10,11 +20,6 @@ cdef class LexicalFeatureExtractor:
         bint extract_e
         bint extract_f
         bint extract_ef
-
-    cpdef list extract(self, int e, int f, list features=?)
-
-
-cpdef list extract_lexical_features(int e, int f, list lexical_extractors)
 
 
 cdef class WholeWordFeatureExtractor(LexicalFeatureExtractor):
@@ -37,3 +42,14 @@ cdef class CategoryFeatureExtractor(LexicalFeatureExtractor):
 
     cdef:
         object digits_re
+
+
+cdef class JumpFeatureExtractor(FeatureExtractor):
+
+    cdef:
+        list _bins
+
+
+cdef class DistortionFeatureExtractor(FeatureExtractor):
+
+    pass

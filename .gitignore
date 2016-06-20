@@ -6,3 +6,4 @@ build/
 lola.egg-info
 __pycache__
 debug/
+*.html

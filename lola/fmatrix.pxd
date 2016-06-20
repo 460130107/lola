@@ -1,6 +1,5 @@
 from lola.corpus cimport Corpus
-from lola.component cimport GenerativeComponent
-from lola.event cimport Event
+from lola.event cimport EventSpace
 cimport numpy as np
 
 
@@ -15,22 +14,6 @@ cdef class Feature:
         int count
         object value
         str parent
-
-
-
-
-cdef class FeatureExtractor:
-
-    cpdef list extract(self, Event event, list features=?)
-
-    cpdef str name(self)
-
-
-cdef class JumpExtractor(FeatureExtractor):
-
-    cdef:
-        str _name
-
 
 
 cdef class FeatureMatrix:
@@ -63,7 +46,7 @@ cdef np.float_t[:,::1] make_cpds(np.float_t[::1] weight_vector,
                                  size_t n_decisions)
 
 
-cpdef FeatureMatrix make_feature_matrices(GenerativeComponent component,
+cpdef FeatureMatrix make_feature_matrices(EventSpace event_space,
                                           Corpus e_corpus,
                                           Corpus f_corpus,
                                           extractors,

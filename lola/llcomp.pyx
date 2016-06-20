@@ -106,9 +106,6 @@ cdef class LogLinearComponent(GenerativeComponent):  # Component
         self._lbfgs_steps = lbfgs_steps
         self._lbfgs_max_attempts = lbfgs_max_attempts
 
-    cpdef Event describe(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
-        return self._event_space.get(e_snt, f_snt, i, j)
-
     cpdef EventSpace event_space(self):
         return self._event_space
 
@@ -135,7 +132,7 @@ cdef class LogLinearComponent(GenerativeComponent):  # Component
         :param j: The jth position in the French sentence
         :return: a parameter for p(f[j]|e[i]), represented by float
         """
-        cdef Event event = self.describe(e_snt, f_snt, i, j)
+        cdef Event event = self._event_space.get(e_snt, f_snt, i, j)
         return self._cpds[event.context.id, event.decision.id]
 
     @cython.nonecheck(False)
@@ -156,7 +153,7 @@ cdef class LogLinearComponent(GenerativeComponent):  # Component
         :param p: Probability associated with p(f_j|e_i)
         :return:
         """
-        cdef Event event = self.describe(e_snt, f_snt, i, j)
+        cdef Event event = self._event_space.get(e_snt, f_snt, i, j)
         self._sparse_counts[event.context.id, event.decision.id] += p
         return self._sparse_counts[event.context.id, event.decision.id]
 
@@ -190,9 +187,7 @@ cdef class LogLinearComponent(GenerativeComponent):  # Component
             nonlocal f_calls
             f_calls += 1
             logging.info('[%d] Computing objective and gradient [%d]', iteration, f_calls)
-            loglikelihood = ObjectiveAndGradient(self._sparse_counts, self._feature_matrix,
-                                 self._e_vocab_size,
-                                 self._f_vocab_size)
+            loglikelihood = ObjectiveAndGradient(self._sparse_counts, self._feature_matrix, self._event_space)
             # in this function we change the logic from maximisation to minimisation
             objective, gradient = loglikelihood.evaluate(w)
             logging.info('[%d] Objective [%d] %f', iteration, f_calls, objective)
@@ -209,7 +204,8 @@ cdef class LogLinearComponent(GenerativeComponent):  # Component
 
         # This is our initial vector, namely, the one we used in the E-step
         w0 = self._weight_vector
-        logging.info('Optimising log-linear (lexical) parameters for %d steps of L-BFGS-B (max %d evaluations)',
+        logging.info('Optimising log-linear parameters (%s) for %d steps of L-BFGS-B (max %d evaluations)',
+                     self.name(),
                      self._lbfgs_steps,
                      self._lbfgs_max_attempts)
         result = minimize(f,  # this function returns (for a given w) the negative likelihood and negative gradient
