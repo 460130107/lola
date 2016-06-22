@@ -4,7 +4,7 @@ from lola.ff cimport FeatureExtractor
 cimport numpy as np
 
 from collections import defaultdict, deque
-from scipy.sparse import dok_matrix
+from scipy.sparse import dok_matrix, lil_matrix
 from scipy.sparse import csr_matrix
 import numpy as np
 
@@ -245,7 +245,7 @@ cdef np.float_t[:,::1] make_cpds2(np.float_t[::1] wd,
     return numerators / denominators[:,np.newaxis]
 
 
-cdef object convert_to_csr(feature_dict, size_t max_rows, size_t max_columns):
+cdef object convert_to_csr(list features, size_t max_rows, size_t max_columns):
     """
     Convert a python dictionary mapping French words to Feature objects into a csr_matrix object.
 
@@ -255,12 +255,14 @@ cdef object convert_to_csr(feature_dict, size_t max_rows, size_t max_columns):
     :return: csr_matrix with counts
     """
     cdef:
-        int f
+        size_t f
         Feature feature
+        list f_features
     # dok_matrix are good for constructing sparse matrices
-    dok = dok_matrix((max_rows, max_columns), dtype=int)
-    for f, features in feature_dict.items():
-        for feature in features:
+    dok = lil_matrix((max_rows, max_columns), dtype=int)
+    for f in range(max_rows):
+        f_features = features[f]
+        for feature in f_features:
             if feature.id < 0:  # skip deleted features
                 continue
             dok[f, feature.id] += 1
@@ -286,8 +288,9 @@ cpdef SparseFeatureMatrix make_sparse_matrices(EventSpace event_space,
         size_t n_features = 0
         size_t s
         np.int_t[::1] e_snt, f_snt
-        size_t i, j, ctxt_id, dec_id
+        size_t n_extractors, th, i, j, ctxt_id, dec_id
         float weight
+        list fvecs, fvec
         Event event
         Feature feature
         FeatureExtractor extractor
@@ -295,11 +298,12 @@ cpdef SparseFeatureMatrix make_sparse_matrices(EventSpace event_space,
         list values
         list feature_repo = [defaultdict(Feature) for _ in extractors]
 
-    fvecs = deque([defaultdict(deque) for _ in range(event_space.n_contexts())])
+    n_extractors = len(extractors)
+    fvecs = [[[] for _ in range(event_space.n_decisions())] for _ in range(event_space.n_contexts())]
 
     # Loop over all sentence pairs gathering features for word pairs
+    logging.info('Featurising %dx%d=%d events', event_space.n_contexts(), event_space.n_decisions(), event_space.n_contexts() * event_space.n_decisions())
     for ctxt_id in range(event_space.n_contexts()):
-        logging.debug('%d/%d', ctxt_id + 1, event_space.n_contexts())
         for dec_id in range(event_space.n_decisions()):
             event = event_space.fetch(ctxt_id, dec_id)
 
@@ -309,7 +313,8 @@ cpdef SparseFeatureMatrix make_sparse_matrices(EventSpace event_space,
             #if len(fvec) > 0:  # already described
             #    continue
             # extract features
-            for th, extractor in enumerate(extractors):
+            for th in range(n_extractors):
+                extractor = extractors[th]
 
                 # sparse indicator features
                 for raw_feature_value in extractor.extract(event):
@@ -357,6 +362,7 @@ cpdef SparseFeatureMatrix make_sparse_matrices(EventSpace event_space,
     # now we can construct csr_matrix objects
     # for each English word e we have one csr_matrix where
     # each row represents a French word f and each column represents a feature phi relating e and f
+    logging.info('Making csr_matrix objects: %d contexts x %d decisions x %d features', event_space.n_contexts(), r, d)
     matrices = [convert_to_csr(fvecs[ctxt], r, d) for ctxt in range(event_space.n_contexts())]
     # when we get here, we will have converted all (python) dictionary of features to (scipy) csr_matrix objects
     if d == 0:
@@ -402,6 +408,7 @@ cpdef DenseFeatureMatrix make_dense_matrices(EventSpace event_space,
     # rather than restricting ourselves to events strictly observed in the parallel corpus
     # because if we don't, some feature values will be 0
     # and that will bias the re-normalisation when making CPDs
+    logging.info('Featurising %dx%d=%d events', event_space.n_contexts(), event_space.n_decisions(), event_space.n_contexts() * event_space.n_decisions())
     for c in range(event_space.n_contexts()):
         for d in range(event_space.n_decisions()):
             event = event_space.fetch(c, d)

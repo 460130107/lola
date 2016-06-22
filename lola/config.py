@@ -119,17 +119,18 @@ def make_loglinear_component(e_corpus: Corpus, f_corpus: Corpus, component_type:
     cfg, max_count = util.re_key_value('max-count', cfg, optional=True, default=-1)
 
     # create a feature matrix based on feature extractors and configuration
-    logging.info('Building feature matrix for %s (%s)', name, component_type)
+    logging.info('Building dense feature matrix for %s (%s)', name, component_type)
+    dense_matrix = make_dense_matrices(event_space, e_corpus, f_corpus, extractors)
+    logging.info('Unique features (%s): dense=%d', name, dense_matrix.dimensionality())
+    logging.info('Building sparse feature matrix for %s (%s)', name, component_type)
     sparse_matrix = make_sparse_matrices(event_space, e_corpus, f_corpus, extractors,
                                            min_occurrences={}, max_occurrences={})
+    logging.info('Unique features (%s): sparse=%d', name,
+                 sparse_matrix.dimensionality())
 
-    dense_matrix = make_dense_matrices(event_space, e_corpus, f_corpus, extractors)
     #print('MATRIX')
     #dense_matrix.pp(e_corpus, f_corpus, sys.stdout)
 
-    logging.info('Unique features (%s): dense=%d sparse=%d', name,
-                 dense_matrix.dimensionality(),
-                 sparse_matrix.dimensionality())
     dimensionality = dense_matrix.dimensionality() + sparse_matrix.dimensionality()
 
     # create an initial parameter vector
