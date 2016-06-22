@@ -16,7 +16,37 @@ cdef class Feature:
         str parent
 
 
-cdef class FeatureMatrix:
+cdef class DenseFeatureMatrix:
+    """
+    This object holds feature matrices describing each generating context (English words).
+    Each feature matrix describes decisions (French words) in terms of sparse features.
+    """
+
+    cdef:
+        np.float_t[:,:,::1] _matrices
+        list _descriptors
+        size_t _d
+
+    cpdef np.float_t[::1] zeros(self)
+
+    cpdef size_t dimensionality(self)
+
+    cpdef object feature_matrix(self, int context)
+
+    cpdef object dots(self, int context, weights)
+
+    cpdef object expected_fvector(self, int context, np.float_t[::1] cpd)
+
+    cpdef object feature_vector(self, int context, int decision)
+
+    cpdef Feature descriptor(self, size_t column)
+
+
+cdef class EmptyDenseFeatureMatrix(DenseFeatureMatrix):
+    pass
+
+
+cdef class SparseFeatureMatrix:
     """
     This object holds feature matrices describing each generating context (English words).
     Each feature matrix describes decisions (French words) in terms of sparse features.
@@ -35,20 +65,42 @@ cdef class FeatureMatrix:
 
     cpdef object feature_matrix(self, int context)
 
+    cpdef object dots(self, int context, np.float_t[::1] weights)
+
+    cpdef object expected_fvector(self, int context, np.float_t[::1] cpd)
+
     cpdef object feature_vector(self, int context, int decision)
 
     cpdef Feature raw_feature_value(self, size_t column)
 
 
+cdef class EmptySparseFeatureMatrix(SparseFeatureMatrix):
+
+    pass
+
+
 cdef np.float_t[:,::1] make_cpds(np.float_t[::1] weight_vector,
-                                 FeatureMatrix feature_matrix,
+                                 SparseFeatureMatrix feature_matrix,
                                  size_t n_contexts,
                                  size_t n_decisions)
 
 
-cpdef FeatureMatrix make_feature_matrices(EventSpace event_space,
+cdef np.float_t[:,::1] make_cpds2(np.float_t[::1] wd,
+                                  np.float_t[::1] ws,
+                                  DenseFeatureMatrix dense_matrix,
+                                  SparseFeatureMatrix sparse_matrix,
+                                  size_t n_contexts,
+                                  size_t n_decisions)
+
+
+cpdef SparseFeatureMatrix make_sparse_matrices(EventSpace event_space,
                                           Corpus e_corpus,
                                           Corpus f_corpus,
                                           extractors,
                                           dict min_occurrences=?,
                                           dict max_occurrences=?)
+
+cpdef DenseFeatureMatrix make_dense_matrices(EventSpace event_space,
+                                          Corpus e_corpus,
+                                          Corpus f_corpus,
+                                          extractors)

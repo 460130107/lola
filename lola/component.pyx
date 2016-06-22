@@ -105,7 +105,7 @@ cdef class LexicalParameters(GenerativeComponent):
         with open('{0}.{1}'.format(path, self.name()), 'w') as fo:
             for e in range(self._e_vocab_size):
                 for f, p in sorted(self._cpds.iternonzero(e), key=cmp_prob):
-                    print('{0} {1} {2}'.format(e_corpus.translate(e), f_corpus.translate(f), p), file=fo)
+                    print('%s %s %r' % (e_corpus.translate(e), f_corpus.translate(f), p), file=fo)
 
 
 cdef class DistortionParameters(GenerativeComponent):
@@ -208,7 +208,7 @@ cdef class JumpParameters(DistortionParameters):
         cdef tuple pair
         with open('{0}.{1}'.format(path, self.name()), 'w') as fo:
             for jump, p in sorted(self._categorical.iternonzero(), key=cmp_prob):
-                print('{0} {1}'.format(jump, p), file=fo)
+                print('%d %r' % (jump, p), file=fo)
 
 
 cdef class BrownDistortionParameters(DistortionParameters):

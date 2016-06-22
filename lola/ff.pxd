@@ -1,13 +1,20 @@
 from lola.corpus cimport Corpus
 from lola.event cimport Event
 import re
+cimport numpy as np
 
 
 cdef class FeatureExtractor:
 
     cdef str _name
 
-    cpdef list extract(self, Event event, list features=?)
+    cpdef list extract(self, Event event)
+
+    cpdef list extract_dense(self, Event event)
+
+    cpdef size_t n_dense(self)
+
+    cpdef list dense_names(self)
 
     cpdef str name(self)
 
@@ -20,6 +27,11 @@ cdef class LexicalFeatureExtractor(FeatureExtractor):
         bint extract_e
         bint extract_f
         bint extract_ef
+
+
+cdef class IBM1Probabilities(LexicalFeatureExtractor):
+
+   cdef np.float_t[:,::1] _ibm1_prob
 
 
 cdef class WholeWordFeatureExtractor(LexicalFeatureExtractor):
@@ -42,6 +54,13 @@ cdef class CategoryFeatureExtractor(LexicalFeatureExtractor):
 
     cdef:
         object digits_re
+
+
+cdef class LengthFeatures(LexicalFeatureExtractor):
+
+    cdef:
+        size_t _n_dense
+        list _dense_names
 
 
 cdef class JumpFeatureExtractor(FeatureExtractor):

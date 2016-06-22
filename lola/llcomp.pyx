@@ -1,8 +1,8 @@
 
 from lola.event cimport Event
 from lola.component cimport GenerativeComponent
-from lola.fmatrix cimport FeatureMatrix
-from lola.fmatrix cimport make_cpds
+from lola.fmatrix cimport SparseFeatureMatrix, DenseFeatureMatrix
+from lola.fmatrix cimport make_cpds, make_cpds2
 from lola.event cimport EventSpace
 from lola.corpus cimport Corpus
 cimport numpy as np
@@ -19,21 +19,24 @@ import logging
 cdef class ObjectiveAndGradient:
 
     cdef:
-        FeatureMatrix _feature_matrix
+        DenseFeatureMatrix _dense_matrix
+        SparseFeatureMatrix _sparse_matrix
         EventSpace _event_space
         object _sparse_expected_counts
 
-    def __init__(self, sparse_counts,
-                 FeatureMatrix feature_matrix,
+    def __init__(self, expected_counts,
+                 DenseFeatureMatrix dense_matrix,
+                 SparseFeatureMatrix sparse_matrix,
                  EventSpace event_space):
         """
 
-        :param sparse_counts: this is the result of the E-step (that is, the
+        :param expected_counts: this is the result of the E-step (that is, the
             part that remains unchanged during the M-step)
         """
-        self._feature_matrix = feature_matrix
+        self._dense_matrix = dense_matrix
+        self._sparse_matrix = sparse_matrix
         self._event_space = event_space
-        self._sparse_expected_counts = csr_matrix(sparse_counts)
+        self._sparse_expected_counts = csr_matrix(expected_counts)
 
     cpdef evaluate(self, weight_vector, regulariser_strength=0.0):
         """
@@ -47,22 +50,42 @@ cdef class ObjectiveAndGradient:
                 see formula 3 and 4
         :returns: expected log likelihood (for maximisation) and gradient (csr_matrix)
         """
+        wd = weight_vector[:self._dense_matrix.dimensionality()]
+        ws = weight_vector[self._dense_matrix.dimensionality():]
+        cdef np.float_t[:, ::1] cpds = make_cpds2(wd, ws,
+                                                  self._dense_matrix, self._sparse_matrix,
+                                                  self._event_space.n_contexts(),
+                                                  self._event_space.n_decisions())
+        cdef float mass, objective
 
-        cdef np.float_t[:, ::1] cpds = make_cpds(weight_vector,
-                                                 self._feature_matrix,
-                                                 self._event_space.n_contexts(),
-                                                 self._event_space.n_decisions())
-
-        gradient = sp.matrix(np.zeros(self._feature_matrix.dimensionality()))
+        gradient = sp.matrix(np.zeros(weight_vector.shape[0]))
         objective = 0.0
 
         for ctxt in range(self._event_space.n_contexts()):
 
             # First we compute the expected feature vector for a given context
-            mu_fvec = self._feature_matrix.feature_matrix(ctxt).T * cpds[ctxt]
+
+
+
+            #mu_fvec = self._sparse_matrix.feature_matrix(ctxt).T * cpds[ctxt]
 
             # much faster version
-            update = self._sparse_expected_counts[ctxt].dot(self._feature_matrix.feature_matrix(ctxt)) - mu_fvec * self._sparse_expected_counts[ctxt].sum()
+            mass = self._sparse_expected_counts[ctxt].sum()
+
+            update = np.zeros(weight_vector.shape[0])
+            if self._dense_matrix.dimensionality():
+                d = self._sparse_expected_counts[ctxt].dot(self._dense_matrix.feature_matrix(ctxt))
+                d_mu = self._dense_matrix.expected_fvector(ctxt, cpds[ctxt])
+                d_update = (d - d_mu * mass)[0]
+                update[:self._dense_matrix.dimensionality()] = d_update
+
+            if self._sparse_matrix.dimensionality():
+                s = self._sparse_expected_counts[ctxt].dot(self._sparse_matrix.feature_matrix(ctxt))
+                s_mu = self._sparse_matrix.expected_fvector(ctxt, cpds[ctxt])
+                s_update = (s - s_mu * mass).A[0]
+                update[self._dense_matrix.dimensionality():] = s_update
+
+            #update = self._sparse_expected_counts[ctxt].dot(self._sparse_matrix.feature_matrix(ctxt)) - mu_fvec * self._sparse_expected_counts[ctxt].sum()
 
             gradient += update
 
@@ -77,11 +100,16 @@ cdef class ObjectiveAndGradient:
 
 
 
+cdef float desc_sort_by_weight(tuple pair):
+    return -pair[1]
+
 cdef class LogLinearComponent(GenerativeComponent):  # Component
 
     cdef:
-        np.float_t[::1] _weight_vector
-        FeatureMatrix _feature_matrix
+        np.float_t[::1] _wd
+        np.float_t[::1] _ws
+        DenseFeatureMatrix _dense_matrix
+        SparseFeatureMatrix _sparse_matrix
         EventSpace _event_space
         np.float_t[:,::1] _cpds
         object _sparse_counts
@@ -89,19 +117,28 @@ cdef class LogLinearComponent(GenerativeComponent):  # Component
         int _lbfgs_max_attempts
 
 
-    def __init__(self, np.float_t[::1] weight_vector,
-                 FeatureMatrix feature_matrix,
+    def __init__(self, np.float_t[::1] wd, np.float_t[::1] ws,
+                 DenseFeatureMatrix dense_matrix,
+                 SparseFeatureMatrix sparse_matrix,
                  EventSpace event_space,
                  int lbfgs_steps=3,
                  int lbfgs_max_attempts=5,
                  name='LogLinearComponent'):
         super(LogLinearComponent, self).__init__(name)
-        self._weight_vector = weight_vector
-        self._feature_matrix = feature_matrix
+        #logging.info('w_d=%s', np.array(wd))
+        #logging.info('w_s=%s', np.array(ws))
+        self._wd = wd
+        self._ws = ws
+        self._dense_matrix = dense_matrix
+        self._sparse_matrix = sparse_matrix
         self._event_space = event_space
-        self._cpds = make_cpds(self._weight_vector, self._feature_matrix,
-                               self._event_space.n_contexts(),
-                               self._event_space.n_decisions())
+
+        self._cpds = make_cpds2(wd,
+                                 ws,
+                                 self._dense_matrix,
+                                 self._sparse_matrix,
+                                 self._event_space.n_contexts(),
+                                 self._event_space.n_decisions())
         self._sparse_counts = lil_matrix(event_space.shape())  # expected counts
         self._lbfgs_steps = lbfgs_steps
         self._lbfgs_max_attempts = lbfgs_max_attempts
@@ -172,11 +209,13 @@ cdef class LogLinearComponent(GenerativeComponent):  # Component
                 (which is the change in w)
         :return:
         """
-        w = self.climb()  # this is the REPEAT in the paper
-        self._weight_vector = w
-        self._cpds = make_cpds(self._weight_vector, self._feature_matrix,
-                               self._event_space.n_contexts(),
-                               self._event_space.n_decisions())
+        self._wd, self._ws = self.climb()  # this is the REPEAT in the paper
+        #logging.info('Optimised w_d=%s', np.array(self._wd))
+        #logging.info('Optimised w_s=%s', np.array(self._ws))
+        self._cpds = make_cpds2(self._wd, self._ws,
+                                self._dense_matrix, self._sparse_matrix,
+                                self._event_space.n_contexts(),
+                                self._event_space.n_decisions())
 
     def climb(self):
 
@@ -187,7 +226,11 @@ cdef class LogLinearComponent(GenerativeComponent):  # Component
             nonlocal f_calls
             f_calls += 1
             logging.info('[%d] Computing objective and gradient [%d]', iteration, f_calls)
-            loglikelihood = ObjectiveAndGradient(self._sparse_counts, self._feature_matrix, self._event_space)
+            #logging.info('[%d] input weights [%d]: %s', iteration, f_calls, w)
+            loglikelihood = ObjectiveAndGradient(self._sparse_counts,
+                                                 self._dense_matrix,
+                                                 self._sparse_matrix,
+                                                 self._event_space)
             # in this function we change the logic from maximisation to minimisation
             objective, gradient = loglikelihood.evaluate(w)
             logging.info('[%d] Objective [%d] %f', iteration, f_calls, objective)
@@ -201,9 +244,10 @@ cdef class LogLinearComponent(GenerativeComponent):  # Component
             # can use logging.info(...)
             # to print the current w on the screen
             logging.info('[%d] L-BFGS-B found new weights', iteration)
+            #logging.debug('[%d] weigthts: %s', iteration, w)
 
         # This is our initial vector, namely, the one we used in the E-step
-        w0 = self._weight_vector
+        w0 = np.concatenate((self._wd, self._ws))
         logging.info('Optimising log-linear parameters (%s) for %d steps of L-BFGS-B (max %d evaluations)',
                      self.name(),
                      self._lbfgs_steps,
@@ -226,21 +270,24 @@ cdef class LogLinearComponent(GenerativeComponent):  # Component
         # result.message
 
         # these are the new weights
-        return result.x
+        return result.x[:self._dense_matrix.dimensionality()], result.x[self._dense_matrix.dimensionality():]
 
     cpdef GenerativeComponent zeros(self):
         """
         :return: copy of itself, initialized with 0's
         """
-        return LogLinearComponent(self._weight_vector, self._feature_matrix,
+        return LogLinearComponent(self._wd, self._ws,
+                                  self._dense_matrix, self._sparse_matrix,
                                   self._event_space, self._lbfgs_steps, self._lbfgs_max_attempts,
                                   self._name)
 
     cpdef save(self, Corpus e_corpus, Corpus f_corpus, str path):
         # save in '{0}.w'.format(path) the weight vector
         # and in '{0}.cat'.format(path) the output of logistic regression for every e-f pair
-        with open('{0}.{1}'.format(path, self.name()), 'w') as fo:
-            for fid, w in enumerate(self._weight_vector):
-                print('{0}\t{1}\t{2}'.format(fid, self._feature_matrix.raw_feature_value(fid), w), file=fo)
-
+        with open('{0}.{1}.sparse'.format(path, self.name()), 'w') as fo:
+            for fid, w in sorted(enumerate(self._ws), key=desc_sort_by_weight):
+                print('{0}\t{1}\t{2}'.format(fid, self._sparse_matrix.raw_feature_value(fid), w), file=fo)
+        with open('{0}.{1}.dense'.format(path, self.name()), 'w') as fo:
+            for fid, w in sorted(enumerate(self._wd), key=desc_sort_by_weight):
+                print('{0}\t{1}\t{2}'.format(fid, self._dense_matrix.descriptor(fid), w), file=fo)
 

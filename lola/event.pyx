@@ -25,6 +25,9 @@ cdef class EventSpace:
     cpdef Event get(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
         return Event(Context(0), Decision(0))
 
+    cpdef Event fetch(self, int context_id, int decision_id):
+        return Event(Context(context_id), Decision(decision_id))
+
     cpdef size_t n_contexts(self):
         return 1
 
@@ -69,6 +72,9 @@ cdef class LexEventSpace(EventSpace):
     cpdef Event get(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
         return LexEvent(self._contexts[e_snt[i]], self._decisions[f_snt[j]])
 
+    cpdef Event fetch(self, int context_id, int decision_id):
+        return LexEvent(self._contexts[context_id], self._decisions[decision_id])
+
     cpdef size_t n_contexts(self):
         return len(self._contexts)
 
@@ -102,6 +108,7 @@ cdef class JumpEventSpace(EventSpace):
 
     def __init__(self, max_english_length):
         self._context = JumpContext()
+        self._shift = max_english_length
         self._decisions = [JumpDecision(n, i) for n, i in enumerate(range(-max_english_length, max_english_length + 1))]
 
     cpdef Event get(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
@@ -109,7 +116,10 @@ cdef class JumpEventSpace(EventSpace):
             size_t l = e_snt.shape[0]
             size_t m = f_snt.shape[0]
             int jump = i - <int>floor(float(j * l) / m)
-        return JumpEvent(self._context, self._decisions[jump])
+        return JumpEvent(self._context, self._decisions[self._shift + jump])
+
+    cpdef Event fetch(self, int context_id, int decision_id):
+        return JumpEvent(self._context, self._decisions[decision_id])
 
     cpdef size_t n_contexts(self):
         return 1
@@ -145,8 +155,9 @@ cdef class DistEvent(Event):
 cdef class DistEventSpace(EventSpace):
 
     def __init__(self, size_t max_english_length):
-        self._contexts = {}
+        self._contexts = {}  # space of context is too massive for pre-allocation
         self._decisions = [DistDecision(i) for i in range(max_english_length + 1)]
+        raise NotImplementedError('DistEventSpace is not fully implemented yet.')
 
     cpdef Event get(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
         cdef:
@@ -159,6 +170,9 @@ cdef class DistEventSpace(EventSpace):
             self._contexts[ctxt_key] = context
         cdef DistDecision decision = self._decisions[i]
         return DistEvent(context, decision)
+
+    cpdef Event fetch(self, int context_id, int decision_id):
+        raise ValueError('DistEventSpace does not support fetch by id.')
 
     cpdef size_t n_contexts(self):
         return len(self._contexts)

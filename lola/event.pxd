@@ -22,6 +22,8 @@ cdef class EventSpace:
 
     cpdef Event get(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j)
 
+    cpdef Event fetch(self, int context_id, int decision_id)
+
     cpdef size_t n_contexts(self)
 
     cpdef size_t n_decisions(self)
@@ -73,6 +75,7 @@ cdef class JumpEventSpace(EventSpace):
     cdef:
         JumpContext _context
         list _decisions
+        size_t _shift
 
 
 cdef class DistContext(Context):

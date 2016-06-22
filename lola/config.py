@@ -9,11 +9,12 @@ from lola.llcomp import LogLinearComponent
 from lola.event import LexEventSpace
 from lola.event import JumpEventSpace
 from lola.event import DistEventSpace
-from lola.fmatrix import make_feature_matrices
+from lola.fmatrix import make_dense_matrices, make_sparse_matrices
 from lola.corpus import Corpus
 from lola.model import DefaultModel
 import logging
 from lola.ff import LexicalFeatureExtractor, JumpFeatureExtractor, DistortionFeatureExtractor
+import sys
 
 
 class ModelSpec:
@@ -119,11 +120,17 @@ def make_loglinear_component(e_corpus: Corpus, f_corpus: Corpus, component_type:
 
     # create a feature matrix based on feature extractors and configuration
     logging.info('Building feature matrix for %s (%s)', name, component_type)
-    feature_matrix = make_feature_matrices(event_space, e_corpus, f_corpus, extractors,
+    sparse_matrix = make_sparse_matrices(event_space, e_corpus, f_corpus, extractors,
                                            min_occurrences={}, max_occurrences={})
 
-    dimensionality = feature_matrix.dimensionality()
-    logging.info('Unique lexical features: %d', dimensionality)
+    dense_matrix = make_dense_matrices(event_space, e_corpus, f_corpus, extractors)
+    #print('MATRIX')
+    #dense_matrix.pp(e_corpus, f_corpus, sys.stdout)
+
+    logging.info('Unique features (%s): dense=%d sparse=%d', name,
+                 dense_matrix.dimensionality(),
+                 sparse_matrix.dimensionality())
+    dimensionality = dense_matrix.dimensionality() + sparse_matrix.dimensionality()
 
     # create an initial parameter vector
     cfg, init_option = util.re_key_value('init', cfg, optional=True, default='normal')
@@ -132,13 +139,18 @@ def make_loglinear_component(e_corpus: Corpus, f_corpus: Corpus, component_type:
     else:  # random initialisation from a normal distribution with mean 0 and var 1.0
         weight_vector = np.random.normal(0, 1.0, dimensionality)
 
+    #print('CPDs')
+    #dense_matrix.pp_cpds(e_corpus, f_corpus, weight_vector, sys.stdout)
+
     # configure SGD
     cfg, sgd_steps = util.re_key_value('sgd-steps', cfg, optional=True, default=3)
     cfg, sgd_attempts = util.re_key_value('sgd-attempts', cfg, optional=True, default=5)
 
     # configure LogLinearParameters
-    state.add_component(name, LogLinearComponent(weight_vector,
-                                                 feature_matrix,
+    state.add_component(name, LogLinearComponent(weight_vector[:dense_matrix.dimensionality()],  # dense
+                                                 weight_vector[dense_matrix.dimensionality():],  # sparse
+                                                 dense_matrix,
+                                                 sparse_matrix,
                                                  event_space,
                                                  lbfgs_steps=sgd_steps,
                                                  lbfgs_max_attempts=sgd_attempts,
@@ -171,7 +183,9 @@ def read_extractor(e_corpus: Corpus, f_corpus: Corpus, args, line: str, i: int, 
         raise ValueError('Duplicate extractor name in line %d: %s', i, name)
 
     # we import the known implementations here
-    from lola.ff import WholeWordFeatureExtractor, AffixFeatureExtractor, CategoryFeatureExtractor, JumpFeatureExtractor
+    from lola.ff import IBM1Probabilities, WholeWordFeatureExtractor, AffixFeatureExtractor
+    from lola.ff import CategoryFeatureExtractor, LengthFeatures
+    from lola.ff import JumpFeatureExtractor
     cfg, extractor_type = util.re_key_value('type', cfg, optional=False, dtype=str)
 
     try:
