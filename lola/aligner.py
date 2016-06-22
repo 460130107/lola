@@ -39,6 +39,10 @@ def argparser():
     parser.add_argument('--test-e', metavar='FILE',
                         type=str,
                         help='An English test corpus (the data we condition on)')
+    parser.add_argument('--min-e-count', type=int, default=0)
+    parser.add_argument('--max-e-count', type=int, default=0)
+    parser.add_argument('--min-f-count', type=int, default=0)
+    parser.add_argument('--max-f-count', type=int, default=0)
     parser.add_argument('--merge', action='store_true', default=False,
                         help='Merge training and test set for training')
 
@@ -77,7 +81,7 @@ def cmd_logging(group):
                         help='Verbosity level')
 
 
-def get_corpora(training_path, test_path, generating):
+def get_corpora(training_path, test_path, generating, min_count, max_count):
     """
     Return training and test data.
 
@@ -88,9 +92,9 @@ def get_corpora(training_path, test_path, generating):
     """
     if test_path is None:  # not test corpus
         if generating:
-            corpus = Corpus(training_path)
+            corpus = Corpus(training_path, min_count=min_count, max_count=max_count)
         else:  # we are conditioning on this corpus
-            corpus = Corpus(training_path, null='<NULL>')
+            corpus = Corpus(training_path, null='<NULL>', min_count=min_count, max_count=max_count)
         return corpus, None
     else:
         # read training data
@@ -103,9 +107,9 @@ def get_corpora(training_path, test_path, generating):
         n_test = len(lines) - n_training
         # create a big corpus with everything
         if generating:
-            corpus = Corpus(lines)
+            corpus = Corpus(lines, min_count=min_count, max_count=max_count)
         else:  # we are conditioning on this corpus
-            corpus = Corpus(lines, null='<NULL>')
+            corpus = Corpus(lines, null='<NULL>', min_count=min_count, max_count=max_count)
         # return two different views: the training view and the test view
         return CorpusView(corpus, 0, n_training), CorpusView(corpus, n_training, n_test)
 
@@ -277,8 +281,10 @@ def main():
 
     # read corpora
     logging.info('Reading data')
-    f_training, f_test = get_corpora(args.french, args.test_f, True)
-    e_training, e_test = get_corpora(args.english, args.test_e, False)  # If we forget generating=False things go really bad!
+    f_training, f_test = get_corpora(args.french, args.test_f, True, args.min_f_count, args.max_f_count)
+    e_training, e_test = get_corpora(args.english, args.test_e, False, args.min_e_count, args.max_e_count)  # If we forget generating=False things go really bad!
+
+    logging.info('Vocabulary size: English %d x French %d', e_training.vocab_size(), f_training.vocab_size())
 
     # read ids (sometimes necessary for NAACL format)
     if args.training_ids:

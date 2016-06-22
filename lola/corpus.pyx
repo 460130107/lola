@@ -12,6 +12,7 @@ Not using these cython macros for now:
 cimport numpy as np
 import numpy as np
 cimport cython
+from collections import Counter
 
 
 cdef tuple tokenize(istream, bos=None):
@@ -37,6 +38,44 @@ cdef tuple tokenize(istream, bos=None):
     return np.array(tokens, dtype='U'), np.array(boundaries, dtype=np.int)
 
 
+cdef tuple tokenize_and_prune(istream, bos=None,
+                              size_t min_count=0, size_t max_count=0,
+                              str min_tag='<UNK-MIN>', str max_tag='<UNK-MAX>'):
+    """
+    This method tokenizes an input corpus and returns a stream of tokens.
+
+    :param istream: input stream (e.g. file handler)
+    :param bos: this is optional and if set it is added to the beginning of every sentence
+    :return: an np.array of tokens, and an np.array of boundary positions
+    """
+    cdef str line, token
+    cdef list tokens = []
+    cdef list boundaries = []
+    counter = Counter()
+
+    # tokenize
+    for line in istream:
+        if bos:
+            tokens.append(bos)
+        for token in line.split():
+            tokens.append(token)
+            counter.update([token])
+        boundaries.append(len(tokens))
+
+    # prune
+    if min_count > 1 or max_count > 1:
+        for i in range(len(tokens)):
+            token = tokens[i]
+            if tokens[i] != bos:
+                if 1 < counter[token] < min_count:
+                    tokens[i] = min_tag
+                elif 1 < max_count < counter[token]:
+                    tokens[i] = max_tag
+
+    return np.array(tokens, dtype='U'), np.array(boundaries, dtype=np.int)
+
+
+
 cdef class Corpus:
     """
     A corpus is a collection of sentences.
@@ -47,7 +86,7 @@ cdef class Corpus:
     Remark: This object offers no guarantee as to which exact index any word will get. Not even the NULL word.
     """
 
-    def __init__(self, istream, null=None):
+    def __init__(self, istream, null=None, min_count=0, max_count=0):
         """
         Creates a corpus from a text file.
         The corpus is internally represented by a flat numpy array.
@@ -61,9 +100,13 @@ cdef class Corpus:
         # we also memorise the boundary positions
         if type(istream) is str:  # this is actually a path to a file
             with open(istream, 'r') as fstream:
-                tokens, self._boundaries = tokenize(fstream, bos=null)
+                tokens, self._boundaries = tokenize_and_prune(fstream, bos=null,
+                                                              min_count=min_count,
+                                                              max_count=max_count)
         else:
-            tokens, self._boundaries = tokenize(istream, bos=null)
+            tokens, self._boundaries = tokenize_and_prune(istream, bos=null,
+                                                          min_count=min_count,
+                                                          max_count=max_count)
         # use numpy to map tokens to integers
         # lookup converts from integers back to strings
         # inverse represents the corpus with words represented by integers
