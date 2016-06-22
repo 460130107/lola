@@ -67,9 +67,9 @@ cdef tuple tokenize_and_prune(istream, bos=None,
         for i in range(len(tokens)):
             token = tokens[i]
             if tokens[i] != bos:
-                if 1 < counter[token] < min_count:
+                if 1 <= counter[token] < min_count:
                     tokens[i] = min_tag
-                elif 1 < max_count < counter[token]:
+                elif 1 <= max_count < counter[token]:
                     tokens[i] = max_tag
 
     return np.array(tokens, dtype='U'), np.array(boundaries, dtype=np.int)
