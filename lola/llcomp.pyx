@@ -14,6 +14,7 @@ from scipy.optimize import minimize
 import scipy as sp
 import numpy as np
 import logging
+import scipy.linalg as LA
 
 
 cdef class ObjectiveAndGradient:
@@ -92,9 +93,9 @@ cdef class ObjectiveAndGradient:
             # This is the expected log-likelihood
             objective += self._sparse_expected_counts[ctxt].dot(np.log(cpds[ctxt]))[0]  # matrix (1,) -> scalar
 
-        # if regulariser_strength != 0.0:
-        #   objective -= regulariser_strength * squared(l2_norm(w))
-        #   gradient -= 2 * regulariser_strength * w
+        if regulariser_strength != 0.0:
+            objective -= regulariser_strength * (LA.norm(weight_vector, ord=2) ** 2)
+            gradient -= 2 * regulariser_strength * weight_vector
 
         return objective, gradient.A[0]  # matrix to standard np.array
 
@@ -115,6 +116,7 @@ cdef class LogLinearComponent(GenerativeComponent):  # Component
         object _sparse_counts
         int _lbfgs_steps
         int _lbfgs_max_attempts
+        float _regulariser_strength
 
 
     def __init__(self, np.float_t[::1] wd, np.float_t[::1] ws,
@@ -123,6 +125,7 @@ cdef class LogLinearComponent(GenerativeComponent):  # Component
                  EventSpace event_space,
                  int lbfgs_steps=3,
                  int lbfgs_max_attempts=5,
+                 float regulariser_strength=0.0,
                  name='LogLinearComponent'):
         super(LogLinearComponent, self).__init__(name)
         #logging.info('w_d=%s', np.array(wd))
@@ -132,6 +135,7 @@ cdef class LogLinearComponent(GenerativeComponent):  # Component
         self._dense_matrix = dense_matrix
         self._sparse_matrix = sparse_matrix
         self._event_space = event_space
+        self._regulariser_strength = regulariser_strength
 
         self._cpds = make_cpds2(wd,
                                  ws,
@@ -232,7 +236,7 @@ cdef class LogLinearComponent(GenerativeComponent):  # Component
                                                  self._sparse_matrix,
                                                  self._event_space)
             # in this function we change the logic from maximisation to minimisation
-            objective, gradient = loglikelihood.evaluate(w)
+            objective, gradient = loglikelihood.evaluate(w, self._regulariser_strength)
             logging.info('[%d] Objective [%d] %f', iteration, f_calls, objective)
             objective *= -1
             gradient *= -1
@@ -279,6 +283,7 @@ cdef class LogLinearComponent(GenerativeComponent):  # Component
         return LogLinearComponent(self._wd, self._ws,
                                   self._dense_matrix, self._sparse_matrix,
                                   self._event_space, self._lbfgs_steps, self._lbfgs_max_attempts,
+                                  self._regulariser_strength,
                                   self._name)
 
     cpdef save(self, Corpus e_corpus, Corpus f_corpus, str path):

@@ -143,6 +143,9 @@ def make_loglinear_component(e_corpus: Corpus, f_corpus: Corpus, component_type:
     # configure SGD
     cfg, sgd_steps = util.re_key_value('sgd-steps', cfg, optional=True, default=3)
     cfg, sgd_attempts = util.re_key_value('sgd-attempts', cfg, optional=True, default=5)
+    cfg, regulariser_strength = util.re_key_value('regulariser-strength', cfg, optional=True, default=0.0)
+    logging.debug('Optimisation settings (%s): sgd-steps=%d sgd-attempts=%d regulariser-strength=%f',
+                  name, sgd_steps, sgd_attempts, regulariser_strength)
 
     # configure LogLinearParameters
     state.add_component(name, LogLinearComponent(weight_vector[:dense_matrix.dimensionality()],  # dense
@@ -152,6 +155,7 @@ def make_loglinear_component(e_corpus: Corpus, f_corpus: Corpus, component_type:
                                                  event_space,
                                                  lbfgs_steps=sgd_steps,
                                                  lbfgs_max_attempts=sgd_attempts,
+                                                 regulariser_strength=regulariser_strength,
                                                  name=name))
 
 
