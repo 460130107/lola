@@ -140,9 +140,6 @@ def make_loglinear_component(e_corpus: Corpus, f_corpus: Corpus, component_type:
     else:  # random initialisation from a normal distribution with mean 0 and var 1.0
         weight_vector = np.random.normal(0, 1.0, dimensionality)
 
-    #print('CPDs')
-    #dense_matrix.pp_cpds(e_corpus, f_corpus, weight_vector, sys.stdout)
-
     # configure SGD
     cfg, sgd_steps = util.re_key_value('sgd-steps', cfg, optional=True, default=3)
     cfg, sgd_attempts = util.re_key_value('sgd-attempts', cfg, optional=True, default=5)

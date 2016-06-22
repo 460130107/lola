@@ -8,7 +8,7 @@ from lola.corpus cimport Corpus
 cimport numpy as np
 cimport cython
 
-from scipy.sparse import lil_matrix
+from scipy.sparse import dok_matrix
 from scipy.sparse import csr_matrix
 from scipy.optimize import minimize
 import scipy as sp
@@ -139,7 +139,7 @@ cdef class LogLinearComponent(GenerativeComponent):  # Component
                                  self._sparse_matrix,
                                  self._event_space.n_contexts(),
                                  self._event_space.n_decisions())
-        self._sparse_counts = lil_matrix(event_space.shape())  # expected counts
+        self._sparse_counts = dok_matrix(event_space.shape())  # expected counts
         self._lbfgs_steps = lbfgs_steps
         self._lbfgs_max_attempts = lbfgs_max_attempts
 

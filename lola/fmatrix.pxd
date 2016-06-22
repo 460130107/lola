@@ -53,9 +53,9 @@ cdef class SparseFeatureMatrix:
     """
 
     cdef:
-        list _matrices
+        object _matrices
         list _reversed_index
-        size_t _d
+        size_t _C, _D, _F
 
     cpdef object sparse_zero_vec(self)
 
