@@ -94,6 +94,7 @@ cdef class ObjectiveAndGradient:
             objective += self._sparse_expected_counts[ctxt].dot(np.log(cpds[ctxt]))[0]  # matrix (1,) -> scalar
 
         if regulariser_strength != 0.0:
+            logging.debug('Regularising: strength=%f', regulariser_strength)
             objective -= regulariser_strength * (LA.norm(weight_vector, ord=2) ** 2)
             gradient -= 2 * regulariser_strength * weight_vector
 
