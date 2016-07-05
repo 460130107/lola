@@ -1,5 +1,9 @@
-# word-alignment-models
-BSc project on feature-rich unsupervised word alignment models
+
+This project is about feature-rich unsupervised word alignment models.
+At this point we are working on 0th order HMMs, that is, IBM2-like models.
+We follow Berg-Kirkpatrick et al (2010) and reparameterise IBM2's categorical distributions using exponentiated linear functions (a log-linear parameterisation).
+
+This code-base started as Guido Linder's final project towards his BSc.
 
 # Build
 
