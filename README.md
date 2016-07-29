@@ -7,47 +7,7 @@ This code-base started as Guido Linder's final project towards his BSc.
 
 # Build
 
-We develop in `python3` and we like to use `virtualenv`:
-
-
-* Creating a virtual environment based on python3: this you only need to do the first time.
-
-
-        virtualenv -p python3 ~/workspace/envs/lola
-
-* Sourcing it: this you need to do whenever you want to run (or develop) the code.
-
-
-        source ~/workspace/envs/lola/bin/activate
-
-
-* In case you use `PyCharm` you will need to configure it to use your environment:        
-
-        # navigate to
-        PyCharm/Preferences/Project/Project Interpreter
-        # point your interpreter to
-        ~/workspace/envs/lola/bin/python
-
-* Requirements
-
-
-        # yolk3k is not a requirement, but it is helpful to list packages in our virtual environment
-        pip install yolk3k
-        pip install numpy 
-        pip install cython
-        pip install scikit-learn
-        
-        
-* Build
-
-        # on OSX set also CC=clang
-        CFLAGS="-std=c++11" python setup.py develop
-
-
-* Unit tests
-
-        cd test
-        python -m unittest *.py
+Check our [build](doc/build.md) instructions.
         
 
 # Examples
