@@ -50,7 +50,7 @@ The only differences are:
 Mapping rare words to special tokens leads to much faster training and for now this is the only way to deal with large vocabularies.
 
 ```sh
-$ perl wa/wa_eval_align.pl wa/en-fr/test.en-fr.naacl experiments/llibm2/ibm2.test.viterbi.naacl
+$ perl wa/wa_eval_align.pl wa/en-fr/test.en-fr.naacl experiments/llibm2/llibm2.test.viterbi.naacl
 ```
 
 
