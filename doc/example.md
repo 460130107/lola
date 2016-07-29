@@ -1,8 +1,8 @@
-* `git clone` and build the code
+* `git clone` and [build](build.md) the code
 
-* Download some [data](https://www.adrive.com/public/YVKseV/wa.tgz)
+* download some [data](https://www.adrive.com/public/YVKseV/wa.tgz)
 
-* Uncompress it with `tar -xzvf wa.tgz`
+* uncompress it with `tar -xzvf wa.tgz`
 
 
 Throughout assume that my repository is under `~/workspace/github/lola/`.
@@ -15,7 +15,7 @@ $ python -m lola.aligner  ~/workspace/github/lola/test/data/ibm2.ini experiments
 ```
 
 We provide some required arguments:
-* a configuration file `~/workspace/github/lola/test/data/ibm2.ini`
+* a [configuration file](config.md) `~/workspace/github/lola/test/data/ibm2.ini`
 * a workspace `experiments/ibm2` where output files are saved
 * training data (`-e` is the side we condition on, `-f` is the side we generate)
 
