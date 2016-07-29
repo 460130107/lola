@@ -10,17 +10,17 @@ from lola.corpus import Corpus
 class CorpusTestCase(unittest.TestCase):
 
     def setUp(self):
-        self.F = Corpus('../training/example.f')
+        self.F = Corpus('data/example.f')
 
         self.f_string_corpus = []
-        with open('../training/example.f', 'r') as fi:
+        with open('data/example.f', 'r') as fi:
             for snt in fi:
                 self.f_string_corpus.append(snt.split())
 
-        self.E = Corpus('../training/example.e', null='<NULL>')
+        self.E = Corpus('data/example.e', null='<NULL>')
 
         self.e_string_corpus = []
-        with open('../training/example.e', 'r') as fi:
+        with open('data/example.e', 'r') as fi:
             for snt in fi:
                 self.e_string_corpus.append(['<NULL>'] + snt.split())  # here we decorate with NULL words
 

@@ -33,21 +33,21 @@ We develop in `python3` and we like to use `virtualenv`:
 
         # yolk3k is not a requirement, but it is helpful to list packages in our virtual environment
         pip install yolk3k
-        # numpy is a requirement
-        pip install numpy
-        # Cython is not yet a requirement, but might become 
+        pip install numpy 
         pip install cython
+        pip install scikit-learn
+        
         
 * Build
 
-        # on mac set CC=clang
+        # on OSX set also CC=clang
         CFLAGS="-std=c++11" python setup.py develop
 
 
 * Unit tests
 
         cd test
-        python -m unittest *
+        python -m unittest *.py
         
 
 # Examples
@@ -166,3 +166,10 @@ In the example, `ibm2` reuses the lexical component previously trained with `ibm
         
         python -m lola.aligner training/ibm2.ini debug/ibm2 -f training/example.f -e training/example.e --save-entropy --save-parameters -v
         python -m lola.aligner training/llibm2.ini debug/llibm2 -f training/example.f -e training/example.e --save-entropy --save-parameters -v
+
+
+# Examples
+
+
+        # Download some data
+        wget https://www.adrive.com/public/YVKseV/wa.tgz
