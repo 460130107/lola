@@ -1,9 +1,8 @@
-# Config file format
 
 
 Lola's configuration file has 3 blocks.
 
-## Extractors
+# Extractors
 
 The block `[extractors]` can be used to configure feature extractor objects.
 You should start by naming the extractor (e.g. words), then separate the name from the configuration with a colon ':'.
@@ -28,7 +27,7 @@ You can repeat extractors of a given type, as long as you name them uniquely, ex
     prefixes: type=AffixFeatures extract_e=True extract_f=False extract_ef=False suffix_sizes=[] prefix_sizes=[2]
 
 
-## Components
+# Components
 
 The second block `[components]` is used to configure locally normalised components of several types.
 Again, you should start by naming a component (e.g. lexical), then separate the name from the configuration with a colon ':'.
@@ -55,7 +54,7 @@ Note that the log-linear component uses two of the feature extractors declared i
 Also, log-linear components are optimised by SGD, thus we note some SGD options being configured.
 
 
-## Models
+# Models
 
 Finally, the block `[models]` is used to specify full models (made of sets of components).
 First, name your model (e.g. ibm1). Then, to define this model, specify a list of unique components with they mandatory keyword 'components='.
@@ -73,10 +72,3 @@ Examples:
 Note that we can have multiple models. They are optimised in the given order (in this case `ibm1` first, then `ibm2`).
 They may reuse certain components, in which case higher models benefit from previously optimised components from lower models.
 In the example, `ibm2` reuses the lexical component previously trained with `ibm1`, but replaces IBM1's uniform distortion by jump-based distortion.
-
-
-# Using config files
-
-        
-        python -m lola.aligner training/ibm2.ini debug/ibm2 -f training/example.f -e training/example.e --save-entropy --save-parameters -v
-        python -m lola.aligner training/llibm2.ini debug/llibm2 -f training/example.f -e training/example.e --save-entropy --save-parameters -v

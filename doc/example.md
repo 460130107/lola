@@ -58,4 +58,15 @@ $ perl wa/wa_eval_align.pl wa/en-fr/test.en-fr.naacl experiments/llibm2/ibm2.tes
 
 ```sh
 $ ls experiments/ibm2
+config.ini  
+ibm1.EM  ibm1.lexical  ibm1.training.viterbi.moses  ibm1.training.viterbi.naacl  ibm1.test.viterbi.moses  ibm1.test.viterbi.naacl
+ibm2.EM  ibm2.jump  ibm2.lexical  ibm2.training.viterbi.moses  ibm2.training.viterbi.naacl ibm2.test.viterbi.moses  ibm2.test.viterbi.naacl
 ```
+
+* first row is a copy of the configuration file so we can remember what models were trained
+* our configuration file specifies two models, namely `ibm1` and `ibm2`, thus we get output files for those models
+* for each model we have:
+    - a log of the EM iterations (.EM)
+    - parameter estimates (e.g. .lexical, .jump)
+    - Viterbi alignments (e.g. .viterbi.moses and .viterbi.naacl) for training/test
+    
