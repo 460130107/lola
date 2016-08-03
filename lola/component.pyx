@@ -10,6 +10,8 @@ from lola.event cimport EventSpace
 from lola.event cimport LexEventSpace
 from lola.event cimport JumpEventSpace
 from lola.event cimport DistEventSpace
+from lola.event cimport Event
+from scipy.sparse import csr_matrix, dok_matrix
 
 
 cdef class GenerativeComponent:
@@ -48,6 +50,7 @@ cdef class GenerativeComponent:
 
 cdef float cmp_prob(tuple pair):
     return -pair[1]
+
 
 cdef class LexicalParameters(GenerativeComponent):
     """
