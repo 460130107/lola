@@ -27,7 +27,7 @@ setup(
     description='Log-linear alignment models',
     version='0.0.dev1',
     packages=['lola'],
-    install_requires=[],
+    install_requires=['typing'],
     include_dirs=[np.get_include()],
     ext_modules=ext_modules
 )
