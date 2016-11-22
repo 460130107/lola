@@ -4,16 +4,12 @@
 
 import numpy as np
 import lola.util as util
-from lola.component import LexicalParameters, UniformAlignment, JumpParameters, BrownDistortionParameters
-from lola.llcomp import LogLinearComponent
-from lola.event import LexEventSpace
-from lola.event import JumpEventSpace
-from lola.event import DistEventSpace
-from lola.fmatrix import make_dense_matrices, make_sparse_matrices
+from lola.component import UniformAlignment
+from lola.component import BrownLexical
+from lola.component import VogelJump
 from lola.corpus import Corpus
-from lola.model import DefaultModel
+from lola.model import GenerativeModel
 import logging
-from lola.ff import LexicalFeatureExtractor, JumpFeatureExtractor, DistortionFeatureExtractor
 import sys
 
 
@@ -30,10 +26,10 @@ class ModelSpec:
     def __str__(self):
         return 'Model %s (iterations=%d): %s' % (self.name, self.iterations, ', '.join(self.components))
 
-    def make(self, components) -> DefaultModel:
-        if not all(name in components for name in self.components):
+    def make(self, components_repo) -> GenerativeModel:
+        if not all(name in components_repo for name in self.components):
             raise ValueError('Missing components')
-        return DefaultModel([components[name] for name in self.components])
+        return GenerativeModel([components_repo[name] for name in self.components])
 
 
 class Config:
@@ -90,75 +86,6 @@ class Config:
         return self._components[name]
 
 
-def make_loglinear_component(e_corpus: Corpus, f_corpus: Corpus, component_type: str, name: str, cfg: str, state: Config, line_number: int):
-    if component_type == 'LogLinearLexical':
-        event_space = LexEventSpace(e_corpus.vocab_size(), f_corpus.vocab_size())
-        supported_extractor = LexicalFeatureExtractor
-    elif component_type == 'LogLinearJump':
-        event_space = JumpEventSpace(e_corpus.max_len())
-        supported_extractor = JumpFeatureExtractor
-    elif component_type == 'LogLinearDistortion':
-        event_space = DistEventSpace(e_corpus.max_len())
-        supported_extractor = DistortionFeatureExtractor
-    else:
-        raise ValueError('Unknown component type: %s' % component_type)
-
-    # get lexical feature extractors
-    cfg, extractor_names = util.re_key_value('extractors', cfg, optional=False)
-    extractors = []
-    for extrator_name in extractor_names:
-        if state.has_extractor(extrator_name):
-            extractor = state.get_extractor(extrator_name)
-            if not isinstance(extractor, supported_extractor):
-                raise ValueError('%s component only takes extractors of type %s, got %s' % (component_type, supported_extractor, type(extractor)))
-            extractors.append(extractor)
-        else:
-            raise ValueError('In line %d, tried to use an undeclared extractor: %s' % (line_number, extrator_name))
-
-    cfg, min_count = util.re_key_value('min-count', cfg, optional=True, default=1)
-    cfg, max_count = util.re_key_value('max-count', cfg, optional=True, default=-1)
-
-    # create a feature matrix based on feature extractors and configuration
-    logging.info('Building dense feature matrix for %s (%s)', name, component_type)
-    dense_matrix = make_dense_matrices(event_space, e_corpus, f_corpus, extractors)
-    logging.info('Unique features (%s): dense=%d', name, dense_matrix.dimensionality())
-    logging.info('Building sparse feature matrix for %s (%s)', name, component_type)
-    sparse_matrix = make_sparse_matrices(event_space, e_corpus, f_corpus, extractors,
-                                           min_occurrences={}, max_occurrences={})
-    logging.info('Unique features (%s): sparse=%d', name,
-                 sparse_matrix.dimensionality())
-
-    #print('MATRIX')
-    #dense_matrix.pp(e_corpus, f_corpus, sys.stdout)
-
-    dimensionality = dense_matrix.dimensionality() + sparse_matrix.dimensionality()
-
-    # create an initial parameter vector
-    cfg, init_option = util.re_key_value('init', cfg, optional=True, default='normal')
-    if init_option == 'uniform':
-        weight_vector = np.full(dimensionality, 1.0 / dimensionality, dtype=np.float)
-    else:  # random initialisation from a normal distribution with mean 0 and var 1.0
-        weight_vector = np.random.normal(0, 1.0, dimensionality)
-
-    # configure SGD
-    cfg, sgd_steps = util.re_key_value('sgd-steps', cfg, optional=True, default=3)
-    cfg, sgd_attempts = util.re_key_value('sgd-attempts', cfg, optional=True, default=5)
-    cfg, regulariser_strength = util.re_key_value('regulariser-strength', cfg, optional=True, default=0.0)
-    logging.debug('Optimisation settings (%s): sgd-steps=%d sgd-attempts=%d regulariser-strength=%f',
-                  name, sgd_steps, sgd_attempts, regulariser_strength)
-
-    # configure LogLinearParameters
-    state.add_component(name, LogLinearComponent(weight_vector[:dense_matrix.dimensionality()],  # dense
-                                                 weight_vector[dense_matrix.dimensionality():],  # sparse
-                                                 dense_matrix,
-                                                 sparse_matrix,
-                                                 event_space,
-                                                 lbfgs_steps=sgd_steps,
-                                                 lbfgs_max_attempts=sgd_attempts,
-                                                 regulariser_strength=regulariser_strength,
-                                                 name=name))
-
-
 def dummy_action(e_corpus: Corpus, f_corpus: Corpus, args, line: str, i: int, state: Config):
     pass
 
@@ -175,29 +102,19 @@ def read_iteration(line, i, iterations):
         raise ValueError('In line %d, expected number of iterations for model %d: %s' % (i, len(iterations) + 1, line))
 
 
-def read_extractor(e_corpus: Corpus, f_corpus: Corpus, args, line: str, i: int, state: Config):
-    try:
-        cfg, [name, _] = util.re_sub('^([^:]+)(:)', '', line)
-    except:
-        raise ValueError('In line %d, expected extractor name: %s' % (i, line))
-
-    if state.has_extractor(name):
-        raise ValueError('Duplicate extractor name in line %d: %s', i, name)
-
-    # we import the known implementations here
-    from lola.ff import IBM1Probabilities, WholeWordFeatureExtractor, AffixFeatureExtractor
-    from lola.ff import CategoryFeatureExtractor, LengthFeatures
-    from lola.ff import JumpFeatureExtractor
-    cfg, extractor_type = util.re_key_value('type', cfg, optional=False, dtype=str)
-
-    try:
-        implementation = eval(extractor_type)
-        state.add_extractor(name, implementation.construct(e_corpus, f_corpus, cfg))
-    except NameError:
-        raise ValueError('In line %d, got an unknown extractor type: %s' % (i, extractor_type))
-
-
 def read_component(e_corpus: Corpus, f_corpus: Corpus, args, line: str, i: int, state: Config):
+    """
+    Instantiate components.
+    If you contribute a new component, make sure to construct it here.
+
+    :param e_corpus:
+    :param f_corpus:
+    :param args:
+    :param line:
+    :param i:
+    :param state:
+    :return:
+    """
     try:
         cfg, [name, _] = util.re_sub('^([^:]+)(:)', '', line)
     except:
@@ -209,23 +126,13 @@ def read_component(e_corpus: Corpus, f_corpus: Corpus, args, line: str, i: int, 
     cfg, component_type = util.re_key_value('type', cfg, optional=False, dtype=str)
 
     if component_type == 'BrownLexical':
-        state.add_component(name, LexicalParameters(e_corpus.vocab_size(),
-                                                    f_corpus.vocab_size(),
-                                                    p=1.0 / f_corpus.vocab_size(),
-                                                    name=name))
+        state.add_component(name, BrownLexical(e_corpus, f_corpus, name=name))
     elif component_type == 'UniformAlignment':
         state.add_component(name, UniformAlignment(name=name))
     elif component_type == 'VogelJump':
-        state.add_component(name, JumpParameters(e_corpus.max_len(),
-                                                 f_corpus.max_len(),
-                                                 1.0 / (2 * e_corpus.max_len() + 1),
-                                                 name=name))
-    elif component_type == 'BrownDistortion':
-        state.add_component(name, BrownDistortionParameters(e_corpus.max_len(),
-                                                            1.0 / (e_corpus.max_len()),
-                                                            name=name))
+        state.add_component(name, VogelJump(e_corpus.max_len(), name=name))
     else:
-        make_loglinear_component(e_corpus, f_corpus, component_type, name, cfg, state, i)
+        raise ValueError("I do not know this type of generative component: %s" % component_type)
 
 
 def read_model(e_corpus: Corpus, f_corpus: Corpus, args, line: str, i: int, state: Config):
@@ -253,7 +160,7 @@ def read_model(e_corpus: Corpus, f_corpus: Corpus, args, line: str, i: int, stat
 def parse_blocks(e_corpus: Corpus, f_corpus: Corpus, args, istream, first_line):
     # types of blocks and their parsers
     header_to_action = {'[components]': read_component,
-                        '[extractors]': read_extractor,
+                        # '[extractors]': read_extractor,
                         '[models]': read_model}
     config = Config()
     action = dummy_action
@@ -275,9 +182,34 @@ def parse_blocks(e_corpus: Corpus, f_corpus: Corpus, args, istream, first_line):
 
 def configure(path, e_corpus: Corpus, f_corpus: Corpus, args) -> Config:
     """
-    :param path: path to configuration file
-    :return: a Config object
+
+    :param path: path to config file
+    :param e_corpus: target Corpus (the conditioning event)
+    :param f_corpus: source Corpus (the data we generate)
+    :param args: command line arguments
+    :return: Config
     """
 
     with open(path) as fi:
         return parse_blocks(e_corpus, f_corpus, args, fi, 1)
+
+
+_EXAMPLE_ = """
+# Here we declare generative components that can be used in building models
+[components]
+# <Name>: type=<Type>
+lexical: type=BrownLexical
+uniform: type=UniformAlignment
+jump: type=VogelJump
+
+[models]
+# <Name>: iterations=<Number> components=['<Name1>','<Name2>']
+ibm1: iterations=5 components=['lexical','uniform']
+ibm2: iterations=5 components=['lexical','jump']
+"""
+
+
+def example():
+    return _EXAMPLE_
+
+

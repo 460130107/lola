@@ -319,6 +319,18 @@ def marginal_likelihood(e_corpus: Corpus, f_corpus: Corpus, table: nparray):
     return total
 
 
+from lola.component import GenerativeComponent
+
+#class MLPComponent(GenerativeComponent):
+#    def __init__(self, name: str):
+#        super(MLPComponent, self).__init__(name)
+#        self._cpds = mlp_output(X)
+
+#    def get(self, e_snt, f_snt, i, j):
+#        return self._cpds[e_snt[i], f_snt[j]]
+
+
+
 def train_latent_mlp(e_corpus: Corpus, f_corpus: Corpus, mlp: MLP):
 
     S = e_corpus.n_sentences()
@@ -405,6 +417,7 @@ def train_latent_mlp(e_corpus: Corpus, f_corpus: Corpus, mlp: MLP):
 
         # This can also help the network to avoid local minima.
         current_cost = train(X, expected_counts)
+
         # Get the current network output for all points in the training set
         # update the categoricals
         theta = mlp_output(X)

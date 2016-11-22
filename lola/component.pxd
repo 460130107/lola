@@ -1,77 +1,44 @@
 cimport numpy as np
-from lola.corpus cimport Corpus
-from lola.sparse cimport SparseCategorical
 from lola.sparse cimport CPDTable
 from lola.event cimport EventSpace
-from lola.event cimport LexEventSpace
-from lola.event cimport JumpEventSpace
-from lola.event cimport DistEventSpace
 
 
 cdef class GenerativeComponent:
 
-    cdef str _name
+    cdef readonly name
 
-    cpdef str name(self)
+    cdef readonly EventSpace event_space
 
-    cpdef EventSpace event_space(self)
+    cpdef float prob(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j)
 
-    cpdef float get(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j)
+    cpdef float observe(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p)
 
-    cpdef float plus_equals(self,  np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p)
+    cpdef setup(self)
 
-    cpdef normalise(self)
+    cpdef update(self)
 
-    cpdef GenerativeComponent zeros(self)
+    cpdef load(self, path)
 
-    cpdef save(self, Corpus e_corpus, Corpus f_corpus, str path)
-
-
-cdef class LexicalParameters(GenerativeComponent):
-
-    cdef CPDTable _cpds
-    cdef size_t _e_vocab_size
-    cdef size_t _f_vocab_size
-    cdef LexEventSpace _event_space
+    cpdef save(self, path)
 
 
-    cpdef size_t e_vocab_size(self)
-
-    cpdef size_t f_vocab_size(self)
-
-
-cdef class DistortionParameters(GenerativeComponent):
-
-    pass
-
-cdef class UniformAlignment(DistortionParameters):
+cdef class UniformAlignment(GenerativeComponent):
 
     pass
 
 
-cdef class JumpParameters(DistortionParameters):
+cdef class CategoricalComponent(GenerativeComponent):
 
     cdef:
-        int _max_english_len
-        int _max_french_len
-        SparseCategorical _categorical
-        JumpEventSpace _event_space
-
-    cdef int jump(self, int l, int m, int i, int j)
-
-    cpdef int max_english_len(self)
-
-    cpdef int max_french_len(self)
+        CPDTable _cpds
+        CPDTable _counts
 
 
-cdef class BrownDistortionParameters(DistortionParameters):
+cdef class BrownLexical(CategoricalComponent):
 
-    cdef:
-        int _max_english_len
-        float _base_value
-        dict _cpds
-        DistEventSpace _event_space
+    pass
 
-    cpdef int max_english_len(self)
 
-    cpdef float base_value(self)
+cdef class VogelJump(CategoricalComponent):
+
+    pass

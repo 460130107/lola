@@ -4,7 +4,7 @@
 
 import unittest
 
-from lola.corpus import Corpus
+from legacy.corpus import Corpus
 
 
 class CorpusTestCase(unittest.TestCase):

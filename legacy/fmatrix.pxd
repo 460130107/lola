@@ -1,5 +1,5 @@
-from lola.corpus cimport Corpus
-from lola.event cimport EventSpace
+from legacy.corpus cimport Corpus
+from legacy.event cimport EventSpace
 cimport numpy as np
 
 

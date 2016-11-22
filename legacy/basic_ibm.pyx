@@ -1,6 +1,6 @@
-from lola.model cimport DefaultModel
-from lola.component cimport LexicalParameters, UniformAlignment, JumpParameters
-from lola.component cimport BrownDistortionParameters
+from legacy.model cimport DefaultModel
+from legacy.component cimport LexicalParameters, UniformAlignment, JumpParameters
+from legacy.component cimport BrownDistortionParameters
 
 
 cdef class IBM1(DefaultModel):

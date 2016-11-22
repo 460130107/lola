@@ -10,10 +10,10 @@ Here "hard-coding" is not as bad as it sounds, since IBM models are indeed made 
 :Authors: - Wilker Aziz
 """
 
-from lola.corpus cimport Corpus
-from lola.model cimport GenerativeModel, SufficientStatistics
-from lola.component cimport GenerativeComponent, LexicalParameters, DistortionParameters
-from lola.component cimport JumpParameters, BrownDistortionParameters
+from legacy.corpus cimport Corpus
+from legacy.model cimport GenerativeModel, SufficientStatistics
+from legacy.component cimport GenerativeComponent, LexicalParameters, DistortionParameters
+from legacy.component cimport JumpParameters, BrownDistortionParameters
 cimport numpy as np
 
 

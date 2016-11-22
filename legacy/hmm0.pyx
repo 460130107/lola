@@ -27,9 +27,9 @@ import sys
 import logging
 cimport libc.math as c_math
 
-from lola.corpus cimport Corpus
-from lola.component cimport GenerativeComponent
-from lola.model cimport GenerativeModel, SufficientStatistics
+from legacy.corpus cimport Corpus
+from legacy.component cimport GenerativeComponent
+from legacy.model cimport GenerativeModel, SufficientStatistics
 
 
 cpdef float viterbi_alignments(Corpus e_corpus, Corpus f_corpus, GenerativeModel model, callback):

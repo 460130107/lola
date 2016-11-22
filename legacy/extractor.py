@@ -2,7 +2,7 @@
 :Authors: - Wilker Aziz
 """
 
-from lola.corpus import Corpus
+from legacy.corpus import Corpus
 import numpy as np
 import re
 
@@ -304,8 +304,8 @@ if __name__ == '__main__':
     F = Corpus('training/example.f')
     E = Corpus('training/example.e', null='<NULL>')
 
-    from lola.ff import WholeWordFeatureExtractor, AffixFeatureExtractor, CategoryFeatureExtractor
-    from lola.ff import extract_lexical_features
+    from legacy.ff import WholeWordFeatureExtractor, AffixFeatureExtractor, CategoryFeatureExtractor
+    from legacy.ff import extract_lexical_features
 
     extractors = list()
     extractors.append(WholeWordFeatureExtractor(E, F))

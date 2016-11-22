@@ -15,9 +15,9 @@ except ImportError:
 
 ext_modules = cythonize('**/*.pyx',
                         language='c++',
-                        exclude=[],
+                        exclude=['legacy/*'],
                         language_level=3,
-                        annotate=True,
+                        #annotate=True,  # this makes HTML annotations
                         )
 
 setup(

@@ -5,261 +5,134 @@ Generative components for alignment models.
 import numpy as np
 cimport numpy as np
 cimport cython
-from libc cimport math as c_math
-from lola.event cimport EventSpace
+from lola.event cimport DummyEventSpace
 from lola.event cimport LexEventSpace
 from lola.event cimport JumpEventSpace
-from lola.event cimport DistEventSpace
-from lola.event cimport Event
-from scipy.sparse import csr_matrix, dok_matrix
+from lola.corpus cimport Corpus
 
 
 cdef class GenerativeComponent:
 
-    def __init__(self, str name):
-        self._name = name
+    def __init__(self, str name, EventSpace event_space):
+        self.name = name
+        self.event_space = event_space
 
-    cpdef str name(self):
-        return self._name
-
-    cpdef EventSpace event_space(self):
-        pass
-
-    cpdef float get(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
+    cpdef float prob(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
         """Get the component value associated with a decision a_j=i."""
-        pass
+        raise NotImplementedError()
 
-    cpdef float plus_equals(self,  np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
+    cpdef float observe(self,  np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
         """Adds to the component value associated with a decision a_j=i"""
+        raise NotImplementedError()
+
+    cpdef setup(self):
+        """Set the generative component up (e.g. compile CPDs)"""
         pass
 
-    cpdef normalise(self):
+    cpdef update(self):
         """Normalise the generative component"""
+        raise NotImplementedError()
+
+    cpdef load(self, path):
         pass
 
-    cpdef GenerativeComponent zeros(self):
-        """
-        Return a 0-counts version of the generative component.
-        This is useful in gathering sufficient statistics.
-        """
+    cpdef save(self, path):
         pass
 
-    cpdef save(self, Corpus e_corpus, Corpus f_corpus, str path):
-        pass
+
+cdef class UniformAlignment(GenerativeComponent):
+
+    def __init__(self, str name='uniform'):
+        super(UniformAlignment, self).__init__(name, DummyEventSpace())
+
+    @cython.cdivision(True)
+    cpdef float prob(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
+        """
+        Parameter associated with a certain jump.
+        """
+        return 1.0 / e_snt.shape[0]
+
+    cpdef float observe(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
+        return p
+
+    cpdef update(self):
+        """Normalise the generative component"""
+        pass  # there is nothing to update here
 
 
 cdef float cmp_prob(tuple pair):
     return -pair[1]
 
 
-cdef class LexicalParameters(GenerativeComponent):
+cdef class CategoricalComponent(GenerativeComponent):
     """
     This is a collection of sparse categorical distributions:
         * one distribution per English word
         * each distribution defined over the French vocabulary
     """
 
-    def __init__(self, size_t e_vocab_size, size_t f_vocab_size, float p=0.0, str name='lexical'):
-        """
-
-        :param e_vocab_size: size of English vocabulary (number of categorical distributions)
-        :param f_vocab_size: size of French vocabulary (support of each categorical distribution)
-        :param p: initial value (e.g. use 1.0/f_vocab_size to get uniform distributions)
-        """
-        super(LexicalParameters, self).__init__(name)
-        self._e_vocab_size = e_vocab_size
-        self._f_vocab_size = f_vocab_size
-        self._cpds = CPDTable(e_vocab_size, f_vocab_size, p)
-        self._event_space = LexEventSpace(e_vocab_size, f_vocab_size)
-
-    cpdef size_t e_vocab_size(self):
-        return self._e_vocab_size
-
-    cpdef size_t f_vocab_size(self):
-        return self._f_vocab_size
-
-    cpdef EventSpace event_space(self):
-        return self._event_space
+    def __init__(self, str name, EventSpace event_space):
+        super(CategoricalComponent, self).__init__(name, event_space)
+        if len(event_space.shape) > 2:
+            raise ValueError("I do not support tensors")
+        cdef size_t d1, d2
+        d1, d2 = event_space.shape
+        # uniform initialisation
+        # C++ sparse CPDs
+        # self._cpds = np.ones(shape=event_space.shape, dtype=float) / np.prod(event_space.shape)
+        self._cpds = CPDTable(d1, d2, 1.0 / d2)
+        self._counts = CPDTable(d1, d2, 0.0)
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cpdef float get(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
+    cpdef float prob(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
         """Get the parameter value associated with cat(f|e)."""
-        return self._cpds.get(e_snt[i], f_snt[j])
+        cdef size_t c, d
+        c, d = self.event_space.get(e_snt, f_snt, i, j)
+        return self._cpds.get(c, d)
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cpdef float plus_equals(self,  np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
+    cpdef float observe(self,  np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
         """Adds to the parameter value associated with cat(f|e)."""
-        return self._cpds.plus_equals(e_snt[i], f_snt[j], p)
+        cdef size_t c, d
+        c, d = self.event_space.get(e_snt, f_snt, i, j)
+        return self._counts.plus_equals(c, d, p)
 
-    cpdef normalise(self):
+    cpdef update(self):
         """Normalise each distribution by its total mass."""
-        self._cpds.normalise()
+        cdef size_t d1, d2
+        d1, d2 = self.event_space.shape
+        self._counts.normalise()
+        self._cpds = self._counts
+        self._counts = CPDTable(d1, d2, 0.0)
 
-    cpdef GenerativeComponent zeros(self):
-        return LexicalParameters(self._e_vocab_size, self._f_vocab_size, 0.0)
 
-    cpdef save(self, Corpus e_corpus, Corpus f_corpus, str path):
-        cdef size_t e
-        cdef size_t f
-        cdef float p
-        cdef tuple pair
-        with open('{0}.{1}'.format(path, self.name()), 'w') as fo:
-            for e in range(self._e_vocab_size):
+cdef class BrownLexical(CategoricalComponent):
+    """
+    Brown's categorical translation distribution.
+    """
+
+    def __init__(self, Corpus e_corpus, Corpus f_corpus, str name='lexical'):
+        super(BrownLexical, self).__init__(name, LexEventSpace(e_corpus, f_corpus))
+
+    cpdef save(self, path):
+        with open(path, 'w') as fo:
+            for e in range(len(self._cpds)):
                 for f, p in sorted(self._cpds.iternonzero(e), key=cmp_prob):
-                    print('%s %s %r' % (e_corpus.translate(e), f_corpus.translate(f), p), file=fo)
+                    e_str, f_str = self.event_space.readable((e, f))
+                    print('%s %s %r' % (e_str, f_str, p), file=fo)
 
-
-cdef class DistortionParameters(GenerativeComponent):
-
-    pass
-
-
-cdef class UniformAlignment(DistortionParameters):
-
-    def __init__(self, str name='uniformdist'):
-        super(UniformAlignment, self).__init__(name)
-
-    cpdef EventSpace event_space(self):
-        return EventSpace()
-
-    @cython.cdivision(True)
-    cpdef float get(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
-        """
-        Parameter associated with a certain jump.
-        """
-        return 1.0 / e_snt.shape[0]
-
-    cpdef float plus_equals(self,  np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
-        return p
-
-    cpdef normalise(self):
-        pass
-
-    cpdef GenerativeComponent zeros(self):
-        return self
-
-
-cdef class JumpParameters(DistortionParameters):
+cdef class VogelJump(CategoricalComponent):
     """
     Vogel's style distortion (jump) parameters for IBM2.
     """
 
+    def __init__(self, int max_english_len, str name='jump'):
+        super(VogelJump, self).__init__(name, JumpEventSpace(max_english_len))
 
-    def __init__(self, int max_english_len, int max_french_len, float base_value, str name='jump'):
-        super(JumpParameters, self).__init__(name)
-        self._max_english_len = max_english_len
-        self._max_french_len = max_french_len
-        self._categorical = SparseCategorical(2*max_english_len  + 1, base_value)
-        self._event_space = JumpEventSpace(max_english_len)
-
-    def __str__(self):
-        return 'max-english-len=%d max-french-len=%d cpd=(%s)' % (self._max_english_len,
-                                                                  self._max_french_len,
-                                                                  self._categorical)
-
-    cpdef EventSpace event_space(self):
-        return self._event_space
-
-    @cython.cdivision(True)
-    cdef int jump(self, int l, int m, int i, int j):
-        """
-        Return the relative jump.
-
-        :param l: English sentence length (including NULL)
-        :param m: French sentence length
-        :param i: 0-based English word position
-        :param j: 0-based French word position
-        :return: i - floor((j + 1) * l / m)
-        """
-        return i - <int>c_math.floor(float((j + 1) * l) / m)
-
-    cpdef int max_english_len(self):
-        return self._max_english_len
-
-    cpdef int max_french_len(self):
-        return self._max_french_len
-
-    cpdef float get(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
-        """
-        Parameter associated with a certain jump.
-        """
-        # compute the jump
-        cdef int jump = self.jump(e_snt.shape[0], f_snt.shape[0], i, j)
-        # retrieve the parameter associated with it
-        # or a base value in case the jump is not yet mapped
-        return self._categorical.get(jump)
-
-    cpdef float plus_equals(self,  np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
-        # compute the jump
-        cdef int jump = self.jump(e_snt.shape[0], f_snt.shape[0], i, j)
-        # accumulate fractional count
-        return self._categorical.plus_equals(jump, p)
-
-    cpdef normalise(self):
-        # sum the values already mapped
-        self._categorical.normalise()
-
-    cpdef GenerativeComponent zeros(self):
-        return JumpParameters(self.max_english_len(), self.max_french_len(), 0.0)
-
-    cpdef save(self, Corpus e_corpus, Corpus f_corpus, str path):
-        cdef size_t e
-        cdef size_t f
-        cdef float p
-        cdef tuple pair
-        with open('{0}.{1}'.format(path, self.name()), 'w') as fo:
-            for jump, p in sorted(self._categorical.iternonzero(), key=cmp_prob):
+    cpdef save(self, path):
+        with open(path, 'w') as fo:
+            for shiftted_jump, p in sorted(self._cpds.iternonzero(0), key=cmp_prob):
+                _, jump = self.event_space.readable((0, shiftted_jump))
                 print('%d %r' % (jump, p), file=fo)
-
-
-cdef class BrownDistortionParameters(DistortionParameters):
-
-    def __init__(self, int max_english_len, float base_value, str name='browndist'):
-        super(BrownDistortionParameters, self).__init__(name)
-        self._max_english_len = max_english_len
-        self._base_value = base_value
-        self._cpds = dict()
-        self._event_space = DistEventSpace(max_english_len)
-
-    cpdef int max_english_len(self):
-        return self._max_english_len
-
-    cpdef float base_value(self):
-        return self._base_value
-
-    cpdef EventSpace event_space(self):
-        return self._event_space
-
-    cpdef float get(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
-        """
-        Parameter associated with a certain jump.
-        """
-        cdef tuple key = (e_snt.shape[0], f_snt.shape[0], j)
-        cdef SparseCategorical cpd
-        if key not in self._cpds:
-            cpd = SparseCategorical(self._max_english_len, self._base_value)
-            self._cpds[key] = cpd
-        else:
-            cpd = self._cpds[key]
-        return cpd.get(i)
-
-    cpdef float plus_equals(self,  np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
-        cdef tuple key = (e_snt.shape[0], f_snt.shape[0], j)
-        cdef SparseCategorical cpd
-        if key not in self._cpds:
-            cpd = SparseCategorical(self._max_english_len, self._base_value)
-            self._cpds[key] = cpd
-        else:
-            cpd = self._cpds[key]
-        return cpd.plus_equals(i, p)
-
-    cpdef normalise(self):
-        cdef tuple ctxt
-        cdef SparseCategorical cpd
-        for ctxt, cpd in self._cpds.items():
-            cpd.normalise()
-
-    cpdef GenerativeComponent zeros(self):
-        return BrownDistortionParameters(self._max_english_len, self._base_value)

@@ -1,10 +1,10 @@
-from lola.event cimport Event, LexEvent, JumpEvent, DistEvent
-from lola.event cimport LexContext, LexDecision
-from lola.event cimport JumpContext, JumpDecision
-from lola.event cimport DistContext, DistDecision
+from legacy.event cimport Event, LexEvent, JumpEvent, DistEvent
+from legacy.event cimport LexContext, LexDecision
+from legacy.event cimport JumpContext, JumpDecision
+from legacy.event cimport DistContext, DistDecision
 from libc.math cimport floor, fabs, exp
 import re
-from lola.util import re_key_value
+from legacy.util import re_key_value
 cimport numpy as np
 import numpy as np
 

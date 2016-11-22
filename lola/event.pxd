@@ -1,101 +1,34 @@
+"""
+Event spaces are used in order to make generative components more modular.
+An event space is responsible for expressing an event in terms of a (possibly empty) conditioning context and an outcome.
+
+"""
+
 cimport numpy as np
-
-
-cdef class Context:
-
-    cdef readonly size_t id
-
-
-cdef class Decision:
-
-    cdef readonly size_t id
-
-
-cdef class Event:
-
-    cdef readonly:
-        Context context
-        Decision decision
+from lola.corpus cimport Corpus
 
 
 cdef class EventSpace:
 
-    cpdef Event get(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j)
+    cdef readonly tuple shape
 
-    cpdef Event fetch(self, int context_id, int decision_id)
+    cpdef tuple get(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j)
 
-    cpdef size_t n_contexts(self)
-
-    cpdef size_t n_decisions(self)
-
-    cpdef tuple shape(self)
+    cpdef tuple readable(self, tuple event)
 
 
-cdef class LexContext(Context):
-
-    cpdef int word(self)
-
-
-cdef class LexDecision(Decision):
-
-    cpdef int word(self)
-
-
-cdef class LexEvent(Event):
-
+cdef class DummyEventSpace(EventSpace):
     pass
 
 
 cdef class LexEventSpace(EventSpace):
 
     cdef:
-        list _contexts
-        list _decisions
-
-
-cdef class JumpContext(Context):
-
-    pass
-
-
-cdef class JumpDecision(Decision):
-
-    cdef int _jump
-
-    cpdef int jump(self)
-
-
-cdef class JumpEvent(Event):
-
-    pass
+        Corpus _e_corpus
+        Corpus _f_corpus
 
 
 cdef class JumpEventSpace(EventSpace):
 
-    cdef:
-        JumpContext _context
-        list _decisions
-        size_t _shift
-
-
-cdef class DistContext(Context):
-
-    cdef readonly int j, l, m
-
-
-cdef class DistDecision(Decision):
-
-    cpdef int i(self)
-
-
-cdef class DistEvent(Event):
-
-    pass
-
-
-cdef class DistEventSpace(EventSpace):
-
-    cdef:
-        dict _contexts
-        list _decisions
+    cdef size_t _shift
 

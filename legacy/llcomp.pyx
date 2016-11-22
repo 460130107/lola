@@ -1,10 +1,10 @@
 
-from lola.event cimport Event
-from lola.component cimport GenerativeComponent
-from lola.fmatrix cimport SparseFeatureMatrix, DenseFeatureMatrix
-from lola.fmatrix cimport make_cpds, make_cpds2
-from lola.event cimport EventSpace
-from lola.corpus cimport Corpus
+from legacy.event cimport Event
+from legacy.component cimport GenerativeComponent
+from legacy.fmatrix cimport SparseFeatureMatrix, DenseFeatureMatrix
+from legacy.fmatrix cimport make_cpds, make_cpds2
+from legacy.event cimport EventSpace
+from legacy.corpus cimport Corpus
 cimport numpy as np
 cimport cython
 

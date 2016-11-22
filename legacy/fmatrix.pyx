@@ -1,6 +1,6 @@
-from lola.corpus cimport Corpus
-from lola.event cimport Event
-from lola.ff cimport FeatureExtractor
+from legacy.corpus cimport Corpus
+from legacy.event cimport Event
+from legacy.ff cimport FeatureExtractor
 cimport numpy as np
 
 from collections import defaultdict, deque
