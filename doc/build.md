@@ -30,6 +30,8 @@ pip install numpy
 pip install scipy
 pip install cython
 pip install scikit-learn
+pip install Theano
+pip install typing
 ```
         
         
