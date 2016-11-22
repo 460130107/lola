@@ -43,7 +43,7 @@ def read_corpora(training_path: str,
         return CorpusView(corpus, 0, n_training), CorpusView(corpus, n_training, n_test)
 
 
-def print_moses_format(s, alignments, posterior, ostream, skip_null=True):
+def print_moses_format(alignments, ostream, skip_null=True):
     """
     Print alignments for a sentence in Moses format.
     :param s: sentence id (ignored)
@@ -56,6 +56,29 @@ def print_moses_format(s, alignments, posterior, ostream, skip_null=True):
         print(' '.join(['{0}-{1}'.format(i, j + 1) for j, i in enumerate(alignments) if i != 0]), file=ostream)
     else:
         print(' '.join(['{0}-{1}'.format(i, j + 1) for j, i in enumerate(alignments)]), file=ostream)
+
+
+def print_lola_format(sid, alignments, posterior, e_corpus: Corpus, f_corpus: Corpus, ostream):
+    """
+    Print alignment in a human readable format.
+
+    :param e_corpus: data we condition on
+    :param f_corpus: data we generate
+    :param sid: sentence id
+    :param alignments: alignments (sequence of a_j values for each j)
+    :param posterior: posterior p(a_j|f,e)
+    :param ostream: where to write alignments to
+    :return:
+    """
+    e_snt = e_corpus.sentence(sid)
+    f_snt = f_corpus.sentence(sid)
+    print(' '.join(['{0}:{1}|{2}:{3}|{4:.2f}'.format(j + 1,
+                                                 f_corpus.translate(f_snt[j]),
+                                                 i,
+                                                 e_corpus.translate(e_snt[i]),
+                                                 p)
+                    for j, (i, p) in enumerate(zip(alignments, posterior))]),
+          file=ostream)
 
 
 def print_naacl_format(s, alignments, posterior, ostream, print_posterior=False, ids=None, skip_null=True):

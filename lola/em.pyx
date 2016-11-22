@@ -163,7 +163,6 @@ cpdef EM(Corpus e_corpus, Corpus f_corpus, int iterations, GenerativeModel model
 
     for iteration in range(iterations):
         logging.debug('[%d] E-step', iteration + 1)
-        model.setup()  # this gives a chance to compile stuff like CPDs (such as it happens within MLPs and LRs)
         e_step(e_corpus, f_corpus, model)
         logging.debug('[%d] M-step', iteration + 1)
         model.update()

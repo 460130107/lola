@@ -3,6 +3,9 @@ from lola.sparse cimport CPDTable
 from lola.event cimport EventSpace
 
 
+cpdef float cmp_prob(tuple pair)
+
+
 cdef class GenerativeComponent:
 
     cdef readonly name
@@ -11,9 +14,7 @@ cdef class GenerativeComponent:
 
     cpdef float prob(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j)
 
-    cpdef float observe(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p)
-
-    cpdef setup(self)
+    cpdef observe(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p)
 
     cpdef update(self)
 

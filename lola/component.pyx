@@ -21,16 +21,12 @@ cdef class GenerativeComponent:
         """Get the component value associated with a decision a_j=i."""
         raise NotImplementedError()
 
-    cpdef float observe(self,  np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
+    cpdef observe(self,  np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
         """Adds to the component value associated with a decision a_j=i"""
         raise NotImplementedError()
 
-    cpdef setup(self):
-        """Set the generative component up (e.g. compile CPDs)"""
-        pass
-
     cpdef update(self):
-        """Normalise the generative component"""
+        """Updates the component (M-step)"""
         raise NotImplementedError()
 
     cpdef load(self, path):
@@ -52,15 +48,14 @@ cdef class UniformAlignment(GenerativeComponent):
         """
         return 1.0 / e_snt.shape[0]
 
-    cpdef float observe(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
-        return p
+    cpdef observe(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
+        pass
 
     cpdef update(self):
-        """Normalise the generative component"""
         pass  # there is nothing to update here
 
 
-cdef float cmp_prob(tuple pair):
+cpdef float cmp_prob(tuple pair):
     return -pair[1]
 
 
@@ -93,14 +88,14 @@ cdef class CategoricalComponent(GenerativeComponent):
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cpdef float observe(self,  np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
+    cpdef observe(self,  np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
         """Adds to the parameter value associated with cat(f|e)."""
         cdef size_t c, d
         c, d = self.event_space.get(e_snt, f_snt, i, j)
-        return self._counts.plus_equals(c, d, p)
+        self._counts.plus_equals(c, d, p)
 
     cpdef update(self):
-        """Normalise each distribution by its total mass."""
+        """CPDs are updated with normalised expected counts, and counts are set to zero."""
         cdef size_t d1, d2
         d1, d2 = self.event_space.shape
         self._counts.normalise()

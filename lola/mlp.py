@@ -1,6 +1,7 @@
 """
 :Authors: - Wilker Aziz
 """
+import logging
 import theano
 import theano.tensor as T
 import numpy as np
@@ -320,15 +321,137 @@ def marginal_likelihood(e_corpus: Corpus, f_corpus: Corpus, table: nparray):
 
 
 from lola.component import GenerativeComponent
+from lola.event import LexEventSpace
+from lola.sparse import CPDTable
+from lola.component import cmp_prob
 
-#class MLPComponent(GenerativeComponent):
-#    def __init__(self, name: str):
-#        super(MLPComponent, self).__init__(name)
-#        self._cpds = mlp_output(X)
 
-#    def get(self, e_snt, f_snt, i, j):
-#        return self._cpds[e_snt[i], f_snt[j]]
+class MLPComponent(GenerativeComponent):
+    """
+    This MLP component functions as a Categorical distribution.
+    The input is an English word and the output is a distribution over the French vocabulary.
 
+    """
+
+    def __init__(self, e_corpus: Corpus, f_corpus: Corpus, name: str = "lexmlp", rng=np.random.RandomState(1234)):
+        super(MLPComponent, self).__init__(name, LexEventSpace(e_corpus, f_corpus))
+
+
+        self._corpus_size = e_corpus.n_sentences()
+
+        self.n_input = e_corpus.vocab_size()
+        self.n_output = f_corpus.vocab_size()
+
+        # input for the classifiers
+        self._X = np.identity(self.n_input, dtype=theano.config.floatX)
+
+        # create MLP
+        builder = MLPBuilder(rng)
+        builder.add_layer(self.n_input, 3)
+        builder.add_layer(3, self.n_output, activation=T.nnet.softmax)
+        self._mlp = builder.build()
+
+        # Create Theano variables for the MLP input
+        mlp_input = T.matrix('mlp_input')
+        # ... and the expected output
+        mlp_expected = T.matrix('mlp_expected')
+        learning_rate = T.scalar('learning_rate')
+
+        # Learning rate and momentum hyperparameter values
+        # Again, for non-toy problems these values can make a big difference
+        # as to whether the network (quickly) converges on a good local minimum.
+        #learning_rate = 0.01
+        momentum = 0
+
+        # Create a theano function for computing the MLP's output given some input
+        self._mlp_output = theano.function([mlp_input], self._mlp.output(mlp_input))
+
+        # Create a function for computing the cost of the network given an input
+        cost = - self._mlp.expected_logprob(mlp_input, mlp_expected)
+        # Create a theano function for training the network
+        self._train = theano.function([mlp_input, mlp_expected, learning_rate],
+                                      # cost function
+                                      cost,
+                                      updates=gradient_updates_momentum(cost,
+                                                                        self._mlp.params,
+                                                                        learning_rate,
+                                                                        momentum))
+
+        # table to store the CPDs (output of MLP)
+        self._cpds = self._mlp_output(self._X)
+        # table to gather expected counts
+        self._counts = np.zeros(self.event_space.shape, dtype=theano.config.floatX)
+        self._i = 0
+
+    def prob(self, e_snt: nparray, f_snt: nparray, i: int, j: int):
+        return self._cpds[self.event_space.get(e_snt, f_snt, i, j)]
+
+    def observe(self, e_snt: nparray, f_snt: nparray, i: int, j: int, p: float):
+        self._counts[self.event_space.get(e_snt, f_snt, i, j)] += p
+
+    def update(self):
+        """
+        A number of steps in the direction of the steepest decent,
+         sufficient statistics are set to zero.
+        """
+
+        # First we need to scale the sufficient statistics by batch size
+        self._counts /= self._corpus_size
+
+        # We'll only train the network with 20 iterations.
+        # A more common technique is to use a hold-out validation set.
+        # When the validation error starts to increase, the network is overfitting,
+        # so we stop training the net.  This is called "early stopping", which we won't do here.
+
+
+        #print('T-TABLE')
+        #print_ttable(e_corpus, f_corpus, theta)
+        #print()
+        #print('marginal_likelihood=%f\n' % marginal_likelihood(e_corpus, f_corpus, theta))
+        max_iterations = 50
+        done_looping = False
+        best_cost = np.inf
+        best_iter = 0
+        improvement_threshold = 0.995
+        patience = 100
+        patience_increase = 10
+        learning_rate = 0.1
+
+        for iteration in range(max_iterations):
+            #learning_rate /= self._i
+
+            # Train the network using the entire training set.
+            # With large datasets, it's much more common to use stochastic or mini-batch gradient descent
+            # where only a subset (or a single point) of the training set is used at each iteration.
+            current_cost = self._train(self._X, self._counts, learning_rate)
+
+            logging.info('[%d] MLP cost=%s', iteration, current_cost)
+            """
+            if current_cost < best_cost:
+                # improve patience if loss improvement is good enough
+                if current_cost < best_cost * improvement_threshold:
+                    #patience = max(patience, iteration * patience_increase)
+                    if iteration >= patience - patience_increase:
+                        patience += patience_increase
+                        logging.info('I am increasing patience to %d', patience)
+
+                best_cost = current_cost
+                best_iter = iteration
+
+            if patience <= iteration:
+                done_looping = True
+                logging.info('Ran out of patience (%d): best_cost=%r best_iteration=%r', patience, best_cost, best_iter)
+            """
+        # Finally, we update the CPDs and reset the sufficient statistics to zero
+        self._cpds = self._mlp_output(self._X)
+        self._counts = np.zeros(self.event_space.shape, dtype=theano.config.floatX)
+
+    def save(self, path):
+        with open(path, 'w') as fo:
+            for e, row in enumerate(self._cpds):
+                for f, p in sorted(enumerate(row), key=cmp_prob):
+                    e_str, f_str = self.event_space.readable((e, f))
+                    print('%s %s %r' % (e_str, f_str, p), file=fo)
 
 
 def train_latent_mlp(e_corpus: Corpus, f_corpus: Corpus, mlp: MLP):
@@ -389,6 +512,7 @@ def train_latent_mlp(e_corpus: Corpus, f_corpus: Corpus, mlp: MLP):
     print_ttable(e_corpus, f_corpus, theta)
     print()
     print('marginal_likelihood=%f\n' % marginal_likelihood(e_corpus, f_corpus, theta))
+
 
     while iteration < max_iteration:
         # Train the network using the entire training set.

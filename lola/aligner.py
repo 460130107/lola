@@ -11,6 +11,7 @@ from lola.config import configure
 from lola.model import GenerativeModel
 from lola.io import print_moses_format
 from lola.io import print_naacl_format
+from lola.io import print_lola_format
 from lola.io import read_corpora
 
 
@@ -46,18 +47,20 @@ def argparser():
     parser.add_argument('--min-f-count', type=int, default=0)
     parser.add_argument('--max-f-count', type=int, default=0)
 
-    cmd_naacl(parser.add_argument_group('NAACL Format'))
+    cmd_viterbi(parser.add_argument_group('Viterbi alignments'))
     cmd_logging(parser.add_argument_group('Logging'))
 
     return parser
 
 
-def cmd_naacl(group):
-    """Command line options for NAACL format"""
+def cmd_viterbi(group):
+    """Command line options for alignment formats"""
+    group.add_argument('--moses', action='store_true', default=False,
+                       help='Save alignments in Moses format')
     group.add_argument('--naacl', action='store_true', default=False,
                        help='Print alignments in NAACL format (as well as Moses format)')
     group.add_argument('--posterior', action='store_true', default=False,
-                       help='Print posterior probabilities for alignments')
+                       help='Print posterior probabilities in NAACL file')
     group.add_argument('--training-ids', metavar='FILE',
                         type=str,
                         help='Sentence ids for the training set (for NAACL format).')
@@ -68,10 +71,6 @@ def cmd_naacl(group):
 
 def cmd_logging(group):
     """Command line options for output level"""
-    group.add_argument('--viterbi', default=False, action='store_true',
-                       help='Save Viterbi alignments')
-    #group.add_argument('--skip-null', action='store_true', default=False,
-    #                   help='Skip NULL alignments when printing decisions')
     group.add_argument('--save-entropy', default=False, action='store_true',
                        help='Save empirical cross entropy progress')
     group.add_argument('--save-parameters', default=False, action='store_true',
@@ -85,32 +84,34 @@ def print_lex_parameter(e, f, p, e_corpus, f_corpus, ostream):
     print('{0} {1} {2}'.format(e_corpus.translate(e), f_corpus.translate(f), p), file=ostream)
 
 
-def print_moses_and_naacl_formats(s, alignments, posterior, moses_stream, naacl_stream,
-                                  print_posterior=False, ids=None, skip_null=True):
-    """Prints alignments for sentence s in both Moses and NAACL format."""
-    print_moses_format(s, alignments, posterior, moses_stream, skip_null)
-    print_naacl_format(s, alignments, posterior, naacl_stream, print_posterior, ids, skip_null)
+def print_alignments(s, alignments, posterior, streams, e_corpus, f_corpus, print_posterior=False, ids=None):
+    for fileformat, stream in streams.items():
+        if fileformat == 'moses':
+            print_moses_format(alignments, stream, skip_null=True)
+        elif fileformat == 'naacl':
+            print_naacl_format(s, alignments, posterior, stream,
+                               print_posterior=print_posterior, ids=ids, skip_null=True)
+        elif fileformat == 'lola':
+            print_lola_format(s, alignments, posterior, e_corpus, f_corpus, stream)
 
 
 def save_viterbi(e_corpus, f_corpus, ids, model, path, args):
     """
     Saves the Viterbi decisions in various formats.
     """
-
+    streams = {'lola': open('{0}.lola'.format(path), 'w')}
     if args.naacl:
-        with open('{0}.moses'.format(path), 'w') as fm:
-            with open('{0}.naacl'.format(path), 'w') as fn:
-                em.viterbi_alignments(e_corpus, f_corpus, model,
-                                        callback=partial(print_moses_and_naacl_formats,
-                                                         moses_stream=fm,
-                                                         naacl_stream=fn,
-                                                         print_posterior=args.posterior,
-                                                         ids=ids))
-    else:
-        with open('{0}.moses'.format(path), 'w') as fm:
-            em.viterbi_alignments(e_corpus, f_corpus, model,
-                                    callback=partial(print_moses_format,
-                                                     ostream=fm))
+        streams['naacl'] = open('{0}.naacl'.format(path), 'w')
+    if args.moses:
+        streams['moses'] = open('{0}.moses'.format(path), 'w')
+
+    em.viterbi_alignments(e_corpus, f_corpus, model,
+                          callback=partial(print_alignments,
+                                           streams=streams,
+                                           e_corpus=e_corpus,
+                                           f_corpus=f_corpus,
+                                           print_posterior=args.posterior,
+                                           ids=ids))
 
 
 def save_entropy(entropies, path):
@@ -141,13 +142,12 @@ def train_and_apply(e_training, f_training, apply_to, iterations,
         entropies.append(corpus_entropy)
         logging.info('%s %s set perplexity: %f', model_name, name, corpus_entropy)
 
-        if args.viterbi:
-            logging.info('Saving %s Viterbi decisions for %s', model_name, name)
-            # apply model to training data
-            save_viterbi(e_corpus, f_corpus, ids,
-                         model,
-                         '{0}/{1}.{2}.viterbi'.format(args.output, model_name, name),
-                         args)
+        logging.info('Saving %s Viterbi decisions for %s', model_name, name)
+        # apply model to training data
+        save_viterbi(e_corpus, f_corpus, ids,
+                     model,
+                     '{0}/{1}.{2}.viterbi'.format(args.output, model_name, name),
+                     args)
 
     return entropies
 
