@@ -133,7 +133,7 @@ def read_component(e_corpus: Corpus, f_corpus: Corpus, args, line: str, i: int, 
     elif component_type == 'VogelJump':
         state.add_component(name, VogelJump(e_corpus.max_len(), name=name))
     elif component_type == "LexMLP":
-        state.add_component(name, MLPComponent(e_corpus, f_corpus, name=name))
+        state.add_component(name, MLPComponent.construct(e_corpus, f_corpus, name, cfg))
     else:
         raise ValueError("I do not know this type of generative component: %s" % component_type)
 
