@@ -58,7 +58,7 @@ cpdef float viterbi_alignments(Corpus e_corpus, Corpus f_corpus, GenerativeModel
         l = e_snt.shape[0]
         for j in range(m):
             best_i = 0
-            best_p = 0
+            best_p = - 1.0
             Z = 0
             for i in range(l):
                 p = model.likelihood(e_snt, f_snt, i, j)
@@ -68,9 +68,7 @@ cpdef float viterbi_alignments(Corpus e_corpus, Corpus f_corpus, GenerativeModel
                     best_p = p
                     best_i = i
             alignment[j] = best_i
-            posterior[j] = best_p if Z == 0 else best_p / Z
-        # in printing we make the French sentence 1-based by convention
-        # we keep the English sentence 0-based because of the NULL token
+            posterior[j] = 0.0 if Z == 0 else best_p / Z
         callback(s, alignment[0:m], posterior[0:m])
 
 

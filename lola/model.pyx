@@ -50,11 +50,6 @@ cdef class GenerativeModel:
         for comp in self._components:
             comp.observe(e_snt, f_snt, i, j, p)
 
-    cpdef setup(self):
-        cdef GenerativeComponent comp
-        for comp in self._components:
-            comp.setup()
-
     cpdef update(self):
         cdef GenerativeComponent comp
         for comp in self._components:

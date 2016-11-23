@@ -15,8 +15,6 @@ cdef class GenerativeModel:
 
     cpdef observe(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p)
 
-    cpdef setup(self)
-
     cpdef update(self)
 
     cpdef load(self, path)

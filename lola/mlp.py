@@ -425,7 +425,7 @@ class MLPComponent(GenerativeComponent):
             # where only a subset (or a single point) of the training set is used at each iteration.
             current_cost = self._train(self._X, self._counts, learning_rate)
 
-            logging.info('[%d] MLP cost=%s', iteration, current_cost)
+            logging.debug('[%d] MLP cost=%s', iteration, current_cost)
             """
             if current_cost < best_cost:
                 # improve patience if loss improvement is good enough

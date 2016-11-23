@@ -72,6 +72,8 @@ def print_lola_format(sid, alignments, posterior, e_corpus: Corpus, f_corpus: Co
     """
     e_snt = e_corpus.sentence(sid)
     f_snt = f_corpus.sentence(sid)
+    # in printing we make the French sentence 1-based by convention
+    # we keep the English sentence 0-based because of the NULL token
     print(' '.join(['{0}:{1}|{2}:{3}|{4:.2f}'.format(j + 1,
                                                  f_corpus.translate(f_snt[j]),
                                                  i,

@@ -183,8 +183,8 @@ def pipeline(e_training, f_training, apply_to, args):
 
         # then we update our old components
         # keeping optimised ones
-        for comp in model:
-            components_repo[comp.name] = comp
+        #for comp in model:
+        #    components_repo[comp.name] = comp
 
 
 def main():

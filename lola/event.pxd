@@ -30,5 +30,5 @@ cdef class LexEventSpace(EventSpace):
 
 cdef class JumpEventSpace(EventSpace):
 
-    cdef size_t _shift
+    cdef int _longest
 
