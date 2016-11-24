@@ -193,7 +193,7 @@ cdef e_step(Corpus e_corpus, Corpus f_corpus, GenerativeModel model):
 
     cdef size_t S = f_corpus.n_sentences()
     cdef np.int_t[::1] f_snt, e_snt
-    cdef np.float_t[::1] likelihood_aj = np.zeros(f_corpus.max_len())
+    cdef np.float_t[::1] likelihood_aj = np.zeros(e_corpus.max_len())
     cdef size_t s, i, j
     cdef int f, e
     cdef float marginal, p
