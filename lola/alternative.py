@@ -76,6 +76,22 @@ class Component:
         pass
 
 
+class UniformLength(Component):
+
+    def __init__(self, longest: int, rv_name):
+        super(UniformLength, self).__init__(rv_name)
+        self._longest = longest
+
+    def generate(self, rv: tuple, value, context: dict) -> float:
+        return 1.0 / self._longest
+
+    def observe(self, rv: tuple, e, context: dict, posterior: float):
+        pass
+
+    def update(self):
+        pass
+
+
 class UniformAlignment(Component):
 
     def __init__(self, rv_name='Aj', length_name='L'):
@@ -311,8 +327,8 @@ def marginal_likelihood(e_corpus: Corpus, f_corpus: Corpus, model: Model, n_clus
         context = dict()
         l = e_snt.shape[0]
         m = f_snt.shape[0]
-        model.generate_rv(make_rv('L'), l, context, context)
-        model.generate_rv(make_rv('M'), m, context, context)
+        log_pl = np.log(model.generate_rv(make_rv('L'), l, context, context))
+        log_pm = np.log(model.generate_rv(make_rv('M'), m, context, context))
         # 0-order alignments
         ll_s = -np.inf  # contribution of this sentence
         for z in range(n_clusters):
@@ -333,11 +349,78 @@ def marginal_likelihood(e_corpus: Corpus, f_corpus: Corpus, model: Model, n_clus
                     pj += p
                 log_pf += np.log(pj)
             ll_s = np.logaddexp(ll_s, log_pz + log_pe + log_pf)
-        ll += ll_s   # uniform length distribution: - np.log(e_snt.shape[0]) - np.log(f_snt.shape[0])
+        ll += log_pl + log_pm + ll_s
     return - ll / e_corpus.n_sentences()
 
 
-def zero_order_joint(e_corpus: Corpus, f_corpus: Corpus, model: Model, iterations=5, n_clusters=1):
+def zero_order_joint_model(e_corpus: Corpus, f_corpus: Corpus, model: Model, iterations=5, n_clusters=1):
+    """
+    Generative story:
+
+        l ~ P(L)
+        m ~ P(M)
+        z ~ P(Z)
+        e_i ~ P(E_i | z) for i=1..l
+        a_j ~ P(A_j | l) for j=1..m
+        f_j ~ P(F_j | e_{a_j}, z) for j=1..m
+
+    Joint distribution:
+        P(F,E,A,Z,L,M) = P(L)P(M)P(Z)P(E|Z)P(A|L,M)P(F|E,A,Z,L,M)
+
+    We make the following independence assumptions:
+
+        P(e|z) = prod_i P(e_i|z)
+        P(f|e,a,z,l,m) = prod_j P(a_j|l,m)P(f_j|e_{a_j},z)
+
+    The EM algorithm depends on 2 posterior computations:
+
+        [1] P(z|f,e,l,m) = P(z)P(e|z)P(f|e,z)/P(f,e)
+        where
+            P(e|z) = \prod_i P(e_i|z)
+            P(f|e,z) = \sum_a P(f,a|e,z) = \prod_j \sum_i P(a_j=i)P(f_j|e_i,z)
+            P(f,e) = \sum_z \sum_a P(f,e,z,a|l,m)
+                = \sum_z P(z)P(e|z) P(f|e,z)
+                = \sum_z P(z)P(e|z) \prod_j \sum_i P(a_j=i) P(f_j|e_i,z)
+        and
+        [2] P(a|f,e,z) = P(a,z,f,e,l,m) / P(f,e,z,l,m)
+            =    P(z)(e|z)P(a|l,m)P(f|e,a,z)
+              ----------------------------------
+              \sum_a P(z)(e|z)P(a|l,m)P(f|e,a,z)
+            =    P(z)(e|z)P(a|l,m)P(f|e,a,z)
+              ----------------------------------
+              P(z)(e|z)\sum_a P(a|l,m)P(f|e,a,z)
+            =   P(z)(e|z)\prod_j P(a_j|l,m)P(f_j|e_{a_j},z)
+              -----------------------------------------------
+              P(z)(e|z)\prod_j\sum_i P(a_j=i|l,m)P(f_j|e_i,z)
+            = \prod_j     P(a_j|l,m)P(f_j|e_{a_j},z)
+                       -------------------------------
+                       \sum_i P(a_j=i|l,m)P(f_j|e_i,z)
+            = \prod_j P(a_j|f, e, z)
+        where
+            P(a_j|f,e,z) =    P(a_j|l,m)P(f_j|e_{a_j},z)
+                           -------------------------------
+                           \sum_i P(a_j=i|l,m)P(f_j|e_i,z)
+
+    Note that the choice of parameterisation is indenpendent of the EM algorithm in this method.
+    For example,
+        P(a_j|l,m) can be
+            * uniform (IBM1)
+            * categorical (IBM2)
+        P(f_j|e_{a_j}, z) can be
+            * categorical and independent of z, i.e. P(f_j|e_{a_j}, z) = P(f_j|e_{a_j})
+            * categorical
+            * PoE: P(f_j|e_{a_j}, z) \propto P(f_j|e_{a_j}) P(f_j|z)
+            * all of the above using MLP or LR instead of categorical distributions
+        we can also have P(a_j|l,m)P(f_j|e_{a_j}, z) modelled by a single LR (with MLP-induced features).
+
+
+    :param e_corpus:
+    :param f_corpus:
+    :param model:
+    :param iterations:
+    :param n_clusters:
+    :return:
+    """
 
     logging.info('Iteration %d Likelihood %f', 0, marginal_likelihood(e_corpus, f_corpus, model, n_clusters))
 
@@ -349,8 +432,8 @@ def zero_order_joint(e_corpus: Corpus, f_corpus: Corpus, model: Model, iteration
             context = {}
             l = e_snt.shape[0]
             m = f_snt.shape[0]
-            model.generate_rv(make_rv('L'), l, context, context)
-            model.generate_rv(make_rv('M'), m, context, context)
+            pl = model.generate_rv(make_rv('L'), l, context, context)
+            pm = model.generate_rv(make_rv('M'), m, context, context)
 
             # compute joint likelihood
             pf_zae = np.ones((n_clusters, m, l), dtype=float)  # p(f|z,a,e)
@@ -418,7 +501,9 @@ def get_ibm2(e_corpus: Corpus, f_corpus: Corpus, ibm1: Model=None):
 
 def get_joint_ibm1(e_corpus: Corpus, f_corpus: Corpus,
                    n_clusters: int = 1, alpha: float = 1.0):
-    components = [UniformAlignment(),
+    components = [UniformLength(e_corpus.max_len(), 'L'),
+                  UniformLength(f_corpus.max_len(), 'M'),
+                  UniformAlignment(),
                   BrownLexical(e_corpus.vocab_size(),
                                f_corpus.vocab_size()),
                   UnigramMixture(n_clusters,
@@ -429,7 +514,9 @@ def get_joint_ibm1(e_corpus: Corpus, f_corpus: Corpus,
 
 def get_joint_zibm1(e_corpus: Corpus, f_corpus: Corpus,
                     n_clusters: int = 1, alpha: float = 1.0):
-    components = [UniformAlignment(),
+    components = [UniformLength(e_corpus.max_len(), 'L'),
+                  UniformLength(f_corpus.max_len(), 'M'),
+                  UniformAlignment(),
                   BrownLexicalZ(n_clusters,
                                 e_corpus.vocab_size(),
                                 f_corpus.vocab_size()),
@@ -444,9 +531,9 @@ def main(e_path, f_path):
     e_corpus = Corpus(open(e_path), null='<null>')
     f_corpus = Corpus(open(f_path))
 
-    n_clusters = 3
+    n_clusters = 1
     model = get_joint_ibm1(e_corpus, f_corpus, n_clusters)
-    zero_order_joint(e_corpus, f_corpus, model, iterations=10, n_clusters=n_clusters)
+    zero_order_joint_model(e_corpus, f_corpus, model, iterations=10, n_clusters=n_clusters)
 
     # TODO: BrownLexicalPOE
     # TODO: better numerical stability with np.log
