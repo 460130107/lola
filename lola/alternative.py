@@ -1,38 +1,31 @@
 """
-:Authors: - Wilker Aziz
+A random variable here is a tuple, with a name (str, first element) and perhaps additional fields.
+The semantics of additional fields is up to the developer. I am not fixing it.
+
+Examples:
+    rv called Z:
+        ('Z',)
+
+    rv called Fj where j = 1:
+        ('Fj', 1)
+
+An assignment to a rv is a tuple made of the rv (first element) and its value.
+The value can be whatever the developer likes, I again not fixing its semantics.
+
+Examples:
+    rv Z whose value is 1
+        (('Z',), 1)
+    rv Fj where j=1 whose value is "dog"
+        (('Fj', 1), "dog")
+    You can use helper functions:
+        assign_rv(make_rv('Z'), 1))
+        assign_rv(make_rv('Fj', j), "dog"))
+
 """
 import numpy as np
 from collections import defaultdict
 import logging
 import itertools
-
-"""
-class RandomVariable:
-
-    def __init__(self, name, *args):
-        self.signature = (name,) + args
-
-    def name(self):
-        return self.signature[0]
-
-    def __str__(self):
-        return self.signature[0] if len(self.signature) == 1 \
-            else '%s_%s' % (self.signature[0], ','.join(self.signature[1:]))
-
-
-class RandomVariable:
-
-    def __init__(self, name: str, index: int):
-        self.name = name
-        self.index = index
-
-    def signature(self):
-        return self.name, self.index
-
-    def __str__(self):
-        return '%s_%d' % (self.name, self.index)
-
-"""
 
 
 def make_rv(name, *args):
@@ -44,8 +37,23 @@ def assign_rv(rv, value):
 
 
 class Component:
+    """
+    A locally normalised component.
+
+    Example:
+
+        a Component might be a lexical translation distribution that generates 'Fj' variables.
+        then it's rv_name is 'Fj'
+    """
 
     def __init__(self, rv_name: str):
+        """
+        The random variable it generates. For now this has to be a single random variable.
+        Unless you create an rv whose semantics are different.
+        TODO: deal with rv_names: list ?
+
+        :param rv_name: str, the name of the random variable.
+        """
         self.rv_name = rv_name
 
     def generate(self, rv: tuple, value, context: dict) -> float:
@@ -53,30 +61,40 @@ class Component:
         Generates a certain assignment of the random variable in context.
         Returns the contribution to the joint distribution.
 
-        :param rv:
-        :param value:
-        :param context:
-        :return:
+        :param rv: this is the rv, remember always a tuple, first the name, then the rest
+        :param value: value of the rv
+        :param context: context containing assignments to other rvs which this component may condition on
+        :return: the probability (always locally normalised)
         """
         pass
 
     def observe(self, rv: tuple, value, context: dict, posterior: float):
         """
         Observe an assignment of the random variable with a certain posterior probability.
+        This is typically used in some sort of E-step.
 
-        :param rv:
-        :param value:
-        :param context:
-        :param posterior:
-        :return:
+        :param rv: this is the rv, remember always a tuple, first the name, then the rest
+        :param value: value of the rv
+        :param context: context containing assignments to other rvs which this component may condition on
+        :param posterior: posterior probability of relevant latent variables
         """
         pass
 
     def update(self):
+        """
+        Update simply maximises the component based on observed expected counts.
+        This is typically used in some sort of M-step.
+        """
         pass
 
 
 class UniformLength(Component):
+    """
+    This is to model P(L) or P(M) for example.
+    In this case,
+        P(L=l) = 1/longest
+        where longest is fixed.
+    """
 
     def __init__(self, longest: int, rv_name):
         super(UniformLength, self).__init__(rv_name)
@@ -93,13 +111,19 @@ class UniformLength(Component):
 
 
 class UniformAlignment(Component):
+    """
+    Models P(A_j|L,M) using a constant, i.e.
+        P(A_j=i|L=l,M=m) = 1.0 / l
+
+    Ideal for IBM1.
+    """
 
     def __init__(self, rv_name='Aj', length_name='L'):
         super(UniformAlignment, self).__init__(rv_name)
         self._length_name = length_name
 
     def generate(self, rv: tuple, value, context: dict) -> float:
-        l = context[(self._length_name,)]
+        l = context[make_rv(self._length_name)]
         return 1.0 / l
 
     def observe(self, rv: tuple, e, context: dict, posterior: float):
@@ -110,6 +134,13 @@ class UniformAlignment(Component):
 
 
 class VogelJump(Component):
+    """
+    Models P(Aj|L, M) using a categorical over jump values, where we know a priori the maximum jump, i.e.
+
+        P(Aj=i|L=l,M=m) = Cat(jump(i, j, l, m))
+
+    Ideal for IBM2
+    """
 
     def __init__(self, longest, rv_name='Aj', l_name='L', m_name='M'):
         super(VogelJump, self).__init__(rv_name)
@@ -120,9 +151,9 @@ class VogelJump(Component):
         self._counts = np.zeros(longest * 2, dtype=float)
 
     def get_jump(self, rv: tuple, i: int, context: dict):
-        j = rv[1]
-        l = context[(self._l_name,)]
-        m = context[(self._m_name,)]
+        j = rv[1]  # rv[0] is the name, i.e. 'Aj', rv[1] in this case is the value of j
+        l = context[make_rv(self._l_name)]
+        m = context[make_rv(self._m_name)]
         jump = int(i - np.floor((j + 1) * float(l) / m))
         if jump < -self._longest:
             jump = - self._longest
@@ -147,6 +178,9 @@ class VogelJump(Component):
 
 
 class UniformMixture(Component):
+    """
+    This a dummy mixture of uniform components.
+    """
 
     def __init__(self, n_components, vocab_size, rv_name='Ei', comp_name='Z'):
         super(UnigramMixture, self).__init__(rv_name)
@@ -164,6 +198,16 @@ class UniformMixture(Component):
 
 
 class UnigramMixture(Component):
+    """
+    Mixture of n unigram distributions.
+
+    Example,
+        we can model P(Ei|Z) with this component,
+        for each value of Z (up to n values) we have one categorical over
+        outcomes of Ei
+
+    Ideal for the cluster/joint IBM model.
+    """
 
     def __init__(self, n_components, vocab_size, alpha=0.0, rv_name='Ei', comp_name='Z',
                  rng=np.random.RandomState(1234)):
@@ -173,14 +217,14 @@ class UnigramMixture(Component):
         else:
             self._cpds = np.full((n_components, vocab_size), 1.0 / vocab_size, dtype=float)
         self._counts = np.zeros((n_components, vocab_size), dtype=float)
-        self._comp_name = comp_name
+        self._comp_rv = make_rv(comp_name)
 
     def generate(self, rv: tuple, e, context: dict) -> float:
-        z = context[(self._comp_name,)]
+        z = context[self._comp_rv]
         return self._cpds[z, e]
 
     def observe(self, rv: tuple, e, context: dict, posterior: float):
-        z = context[(self._comp_name,)]
+        z = context[self._comp_rv]
         self._counts[z, e] += posterior
 
     def update(self):
@@ -191,6 +235,11 @@ class UnigramMixture(Component):
 
 
 class BrownLexical(Component):
+    """
+    Models P(Fj|E_Aj) with a categorical distribution per assingment of English word.
+
+    Ideal for IBM1.
+    """
 
     def __init__(self, e_vocab_size, f_vocab_size, rv_name='Fj', e_name='Ei', a_name='Aj'):
         super(BrownLexical, self).__init__(rv_name)
@@ -201,8 +250,8 @@ class BrownLexical(Component):
 
     def generate(self, rv: tuple, f, context: dict) -> float:
         j = rv[1]
-        aj = context[(self._a_name, j)]
-        e = context[(self._e_name, aj)]
+        aj = context[(self._a_name, j)]  # looks for an assignment to ('Aj', j)
+        e = context[(self._e_name, aj)]  # looks for an assignment to ('Ei', aj)
         return self._cpds[e, f]
 
     def observe(self, rv: tuple, f, context: dict, posterior: float):
@@ -219,28 +268,32 @@ class BrownLexical(Component):
 
 
 class BrownLexicalZ(Component):
+    """
+    Models P(Fj|E_Aj, Z) with one categorical per pair (English word, cluster).
+    """
 
     def __init__(self, n_clusters, e_vocab_size, f_vocab_size,
                  rv_name='Fj', e_name='Ei', a_name='Aj', z_name='Z'):
+        # TODO: add an alpha parameter to initialise with Dirichlet samples
         super(BrownLexicalZ, self).__init__(rv_name)
         self._cpds = np.full((n_clusters, e_vocab_size, f_vocab_size), 1.0 / f_vocab_size, dtype=float)
         self._counts = np.zeros((n_clusters, e_vocab_size, f_vocab_size), dtype=float)
         self._e_name = e_name
         self._a_name = a_name
-        self._z_name = z_name
+        self._z_rv = make_rv(z_name)
 
     def generate(self, rv: tuple, f, context: dict) -> float:
         j = rv[1]
         aj = context[make_rv(self._a_name, j)]
         e = context[make_rv(self._e_name, aj)]
-        z = context[make_rv(self._z_name)]
+        z = context[self._z_rv]
         return self._cpds[z, e, f]
 
     def observe(self, rv: tuple, f, context: dict, posterior: float):
         j = rv[1]
         aj = context[make_rv(self._a_name, j)]
         e = context[make_rv(self._e_name, aj)]
-        z = context[make_rv(self._z_name)]
+        z = context[self._z_rv]
         self._counts[z, e, f] += posterior
 
     def update(self):
@@ -251,12 +304,18 @@ class BrownLexicalZ(Component):
 
 
 class Model:
+    """
+    A container for generative components.
+    """
 
     def __init__(self, components):
         self._components = tuple(components)
         self._comps_by_rv = defaultdict(list)
         for comp in self._components:
             self._comps_by_rv[comp.rv_name].append(comp)
+        for rv_name, comps in self._comps_by_rv.items():
+            if len(comps) > 1:
+                raise ValueError('In a Bayesian network variables should never be generated twice: %s' % rv_name)
 
     def __iter__(self):
         return iter(self._components)
@@ -265,11 +324,11 @@ class Model:
         """
         Generates a variable returning its factor.
         The context is updated at the end of the method (after generation).
-        :param rv:
-        :param value:
-        :param context:
-        :param state:
-        :return:
+        :param rv: a single rv
+        :param value: its assignment
+        :param context: the context in which it is generated
+        :param state: where we store the rv assignment after generation
+        :return: probability
         """
         factor = 1.0
         for comp in self._comps_by_rv.get(rv[0], []):  # we filter by rv's name
@@ -282,18 +341,24 @@ class Model:
         Observe a variable updating sufficient statistics.
         The context is updated at the end of the method (after observation).
 
-        :param rv:
-        :param value:
-        :param context:
-        :param state:
-        :param posterior:
-        :return:
+        :param rv: a single rv
+        :param value: its assignment
+        :param context: the context in which it is generated
+        :param state: where we store the rv assignment after generation
+        :param posterior: the posterior over latent variables
         """
         for comp in self._comps_by_rv.get(rv[0], []):
             comp.observe(rv, value, context, posterior)
         state[rv] = value
 
     def generate(self, predictions: list, context: dict) -> (float, dict):
+        """
+
+        :param predictions: an ordered list of rv assingments, i.e., rvs paired with their values
+            rvs get generated in the given order.
+        :param context: context in which they get generated
+        :return: probability, state (which in this case includes the context)
+        """
         state = dict(context)
         factor = 1.0
         for rv, value in predictions:
@@ -304,6 +369,14 @@ class Model:
         return factor, state
 
     def observe(self, predictions: list, context: dict, posterior: float) -> dict:
+        """
+
+        :param predictions: an ordered list of rv assingments, i.e., rvs paired with their values
+            rvs get generated in the given order.
+        :param context: context in which they get generated
+        :param posterior: posterior over latent variables
+        :return: state (which in this case includes the context)
+        """
         state = dict(context)
         for rv, value in predictions:
             # update components associated with an RV
@@ -447,11 +520,9 @@ def zero_order_joint_model(e_corpus: Corpus, f_corpus: Corpus, model: Model, ite
                 log_pze[z] = log_pz + log_pe
                 for j, f in enumerate(f_snt):
                     for i, e in enumerate(e_snt):
-                        predictions = [#(make_rv('Z'), z),
-                                       #(make_rv('Ei', i), e),
-                                       (make_rv('Aj', j), i),
+                        predictions = [(make_rv('Aj', j), i),
                                        (make_rv('Fj', j), f)]
-                        pf_zae[z, j, i], out = model.generate(predictions, state)
+                        pf_zae[z, j, i], _ = model.generate(predictions, state)
 
             # gather expected observations based on posterior
             log_pfj_ez = np.log(pf_zae.sum(2))  # p(f_j|e,z) = \sum_i p(f_j,a_j=i|e,z)
@@ -514,8 +585,8 @@ def get_joint_ibm1(e_corpus: Corpus, f_corpus: Corpus,
 
 def get_joint_zibm1(e_corpus: Corpus, f_corpus: Corpus,
                     n_clusters: int = 1, alpha: float = 1.0):
-    components = [UniformLength(e_corpus.max_len(), 'L'),
-                  UniformLength(f_corpus.max_len(), 'M'),
+    components = [UniformLength(e_corpus.max_len(), 'L'),  # P(L=l) = 1/e_max_len
+                  UniformLength(f_corpus.max_len(), 'M'),  # P(M=m) = 1/f_max_len
                   UniformAlignment(),
                   BrownLexicalZ(n_clusters,
                                 e_corpus.vocab_size(),
@@ -532,16 +603,16 @@ def main(e_path, f_path):
     f_corpus = Corpus(open(f_path))
 
     n_clusters = 1
+    model = get_ibm1(e_corpus, f_corpus)
     model = get_joint_ibm1(e_corpus, f_corpus, n_clusters)
     zero_order_joint_model(e_corpus, f_corpus, model, iterations=10, n_clusters=n_clusters)
 
     # TODO: BrownLexicalPOE
-    # TODO: better numerical stability with np.log
 
 
 
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s', datefmt='%H:%M:%S')
-    main('100.e', '100.f')
+    main('example.e', 'example.f')
 
