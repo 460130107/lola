@@ -9,7 +9,6 @@ Not using these macros for now:
 # cython: cdivision=True
 # cython: nonecheck=False
 
-
 :Authors: - Wilker Aziz
 """
 
@@ -20,16 +19,13 @@ Not using these macros for now:
 # cython: nonecheck=False
 """
 
-import numpy as np
-cimport numpy as np
-cimport cython
-import sys
 import logging
+cimport cython
+cimport numpy as np
 cimport libc.math as c_math
-
+import numpy as np
 from lola.corpus cimport Corpus
-from lola.model cimport GenerativeModel
-
+from lola.hmm0.model cimport GenerativeModel
 
 cpdef float viterbi_alignments(Corpus e_corpus, Corpus f_corpus, GenerativeModel model, callback):
     """

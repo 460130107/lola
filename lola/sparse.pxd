@@ -1,3 +1,6 @@
+"""
+# distutils: language=c++
+"""
 from libcpp.unordered_map cimport unordered_map as cppmap
 from libcpp.vector cimport vector as cppvector
 

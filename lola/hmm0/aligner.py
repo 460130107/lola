@@ -1,18 +1,17 @@
 import argparse
-import sys
-import shutil
 import logging
-import numpy as np
 import os
-
+import shutil
 from functools import partial
-import lola.em as em
-from lola.config import configure
-from lola.model import GenerativeModel
+
+import numpy as np
+from lola.io import print_lola_format
 from lola.io import print_moses_format
 from lola.io import print_naacl_format
-from lola.io import print_lola_format
 from lola.io import read_corpora
+from lola.hmm0.model import GenerativeModel
+from lola.hmm0.config import configure
+import lola.hmm0.em as em
 
 
 def argparser():

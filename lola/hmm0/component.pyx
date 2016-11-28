@@ -2,13 +2,14 @@
 Generative components for alignment models.
 """
 
-import numpy as np
 cimport numpy as np
 cimport cython
-from lola.event cimport DummyEventSpace
-from lola.event cimport LexEventSpace
-from lola.event cimport JumpEventSpace
+import numpy as np
 from lola.corpus cimport Corpus
+from lola.hmm0.event cimport DummyEventSpace
+from lola.hmm0.event cimport LexEventSpace
+from lola.hmm0.event cimport JumpEventSpace
+
 
 
 cdef class GenerativeComponent:

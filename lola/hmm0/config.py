@@ -2,16 +2,13 @@
 :Authors: - Wilker Aziz
 """
 
-import numpy as np
 import lola.util as util
-from lola.component import UniformAlignment
-from lola.component import BrownLexical
-from lola.component import VogelJump
-from lola.mlp import MLPComponent
 from lola.corpus import Corpus
-from lola.model import GenerativeModel
-import logging
-import sys
+from lola.hmm0.mlp import MLPComponent
+from lola.hmm0.model import GenerativeModel
+from lola.hmm0.component import BrownLexical
+from lola.hmm0.component import UniformAlignment
+from lola.hmm0.component import VogelJump
 
 
 class ModelSpec:

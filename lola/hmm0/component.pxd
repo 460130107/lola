@@ -1,6 +1,6 @@
 cimport numpy as np
 from lola.sparse cimport CPDTable
-from lola.event cimport EventSpace
+from lola.hmm0.event cimport EventSpace
 
 
 cpdef float cmp_prob(tuple pair)

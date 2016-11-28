@@ -1,6 +1,5 @@
 cimport numpy as np
-from lola.corpus cimport Corpus
-from lola.component cimport GenerativeComponent
+from lola.hmm0.component cimport GenerativeComponent
 
 
 cdef class GenerativeModel:
