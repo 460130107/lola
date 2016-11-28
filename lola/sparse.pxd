@@ -27,6 +27,8 @@ cdef class SparseCategorical:
 
     cpdef float normalise(self)
 
+    cpdef make_dense(self)
+
 
 cdef class CPDTable:
 
@@ -44,3 +46,5 @@ cdef class CPDTable:
     cpdef float plus_equals(self, size_t x, int y, float value)
 
     cpdef void normalise(self)
+
+    cpdef make_dense(self)

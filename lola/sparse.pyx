@@ -6,6 +6,8 @@ Auxiliary data structures for sparse representations.
 from libcpp.utility cimport pair as cpppair
 from cython.operator cimport dereference as deref, preincrement as inc
 cimport cython
+import numpy as np
+cimport numpy as np
 
 
 cdef class SparseCategorical:
@@ -106,6 +108,13 @@ cdef class SparseCategorical:
     def iternonzero(self):
         return dict(self._data).items()
 
+    cpdef make_dense(self):
+        cpd = np.zeros(self._support_size, dtype=float)
+        cdef cppmap[int, float].iterator it = self._data.begin()
+        while it != self._data.end():
+            cpd[deref(it).first] = deref(it).second
+            inc(it)
+        return cpd
 
 
 cdef class CPDTable:
@@ -126,6 +135,10 @@ cdef class CPDTable:
 
     def __len__(self):
         return self._cpds.size()
+
+    @property
+    def shape(self):
+        return self._cpds.size(), self._support_size
 
     cpdef float get(self, size_t x, int y):
         """
@@ -187,3 +200,17 @@ cdef class CPDTable:
     def iternonzero(self, size_t x):
         cdef cppvector[cppmap[int, float]].iterator cpd_it = self._cpds.begin() + x
         return dict(deref(cpd_it)).items()
+
+    cpdef make_dense(self):
+        cpd = np.zeros(self.shape, dtype=float)
+        cdef cppvector[cppmap[int, float]].iterator cpd_it = self._cpds.begin()
+        cdef cppmap[int, float].iterator it
+        cdef size_t row = 0
+        while cpd_it != self._cpds.end():
+            it = deref(cpd_it).begin()
+            while it != deref(cpd_it).end():
+                cpd[row, deref(it).first] = deref(it).second
+                inc(it)
+            inc(cpd_it)
+            row += 1
+        return cpd
