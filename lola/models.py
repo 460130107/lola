@@ -1,48 +1,66 @@
 """
 :Authors: - Wilker Aziz
 """
-import logging
 import numpy as np
-import lola.cat as cat
-from lola.pgm import DirectedModel
-from lola.pgm import make_rv
+import logging
 from lola.corpus import Corpus
+import lola.cat as cat
 
 
-def marginal_likelihood(e_corpus: Corpus, f_corpus: Corpus, model: DirectedModel, n_clusters):
+def marginal_likelihood(e_corpus: Corpus, f_corpus: Corpus,
+                        PL: cat.LengthDistribution,
+                        PM: cat.LengthDistribution,
+                        PZ: cat.ClusterDistribution,
+                        PEi: cat.TargetDistribution,
+                        PAj: cat.AlignmentDistribution,
+                        PFj: cat.SourceDistribution,
+                        n_clusters):
     ll = 0.0
     for e_snt, f_snt in zip(e_corpus.itersentences(), f_corpus.itersentences()):
         # observations
         context = dict()
         l = e_snt.shape[0]
         m = f_snt.shape[0]
-        log_pl = np.log(model.generate_rv(make_rv('L'), l, context, context))
-        log_pm = np.log(model.generate_rv(make_rv('M'), m, context, context))
+        log_pl = np.log(PL.generate(l))
+        log_pm = np.log(PM.generate(m))
         # 0-order alignments
-        ll_s = -np.inf  # contribution of this sentence
+        # P(f,e) = \sum_z P(z) P(e|z) P(f|z,e)
+        log_pfe = -np.inf  # contribution of this sentence
         for z in range(n_clusters):
             state = dict(context)
             # contribution of the cluster
-            log_pz = np.log(model.generate_rv(make_rv('Z'), z, state, state))
+            log_pz = np.log(PZ.generate(z, l, m))
             # compute the contribution of the entire English sentence
-            log_pe = 0.0
+            log_pe_z = 0.0
+            # P(e|z) = \prod_i P(e_i|z)
             for i, e in enumerate(e_snt):
-                log_pe += np.log(model.generate_rv(make_rv('Ei', i), e, state, state))
-            log_pf = 0.0
+                log_pe_z += np.log(PEi.generate((i, e), z, l, m))
+
+            # P(f|z,e) = \prod_j P(f_j|z,e)
+            #          = \prod_j \sum_i P(f_j,a_j=i|z,e)
+            log_pf_ze = 0.0
             for j, f in enumerate(f_snt):
-                pj = 0.0  # contribution of this French word
+                # P(f_j|z,e) = \sum_i P(f_j,a_j=i|z,e)
+                pfj_ze = 0.0  # contribution of this French word
                 for i, e in enumerate(e_snt):
-                    predictions = [(make_rv('Aj', j), i),
-                                   (make_rv('Fj', j), f)]
-                    p, _ = model.generate_rvs(predictions, state)
-                    pj += p
-                log_pf += np.log(pj)
-            ll_s = np.logaddexp(ll_s, log_pz + log_pe + log_pf)
-        ll += log_pl + log_pm + ll_s
+                    pfj_ze += PAj.generate((j, i), e_snt, z, l, m) * PFj.generate((j, f), (j, i), e_snt, z, l, m)
+                # P(f|z,e) = \prod_j P(f_j|z,e)
+                log_pf_ze += np.log(pfj_ze)
+            # \sum_z P(z) P(e|z) P(f|z,e)
+            log_pfe = np.logaddexp(log_pfe, log_pz + log_pe_z + log_pf_ze)
+        # \sum_{f,e} P(l)P(m)P(f,e|l,m)
+        ll += log_pl + log_pm + log_pfe
     return - ll / e_corpus.n_sentences()
 
 
-def zero_order_joint_model(e_corpus: Corpus, f_corpus: Corpus, model: DirectedModel, iterations=5, n_clusters=1):
+def zero_order_joint_model(e_corpus: Corpus, f_corpus: Corpus,
+                           PL: cat.LengthDistribution,
+                           PM: cat.LengthDistribution,
+                           PZ: cat.ClusterDistribution,
+                           PEi: cat.TargetDistribution,
+                           PAj: cat.AlignmentDistribution,
+                           PFj: cat.SourceDistribution,
+                           iterations=5, n_clusters=1):
     """
     Generative story:
 
@@ -111,109 +129,91 @@ def zero_order_joint_model(e_corpus: Corpus, f_corpus: Corpus, model: DirectedMo
     :return:
     """
 
-    logging.info('Iteration %d Likelihood %f', 0, marginal_likelihood(e_corpus, f_corpus, model, n_clusters))
+    components = [PL, PM, PZ, PEi, PAj, PFj]
+
+
+    logging.info('Iteration %d Likelihood %f', 0, marginal_likelihood(e_corpus, f_corpus,
+                                                                      PL, PM, PZ, PEi, PAj, PFj,
+                                                                      n_clusters))
 
     for iteration in range(1, iterations + 1):
-        print(iteration)
         # E-step
         for s, (e_snt, f_snt) in enumerate(zip(e_corpus.itersentences(), f_corpus.itersentences())):
-            print('s=%d' % s)
             # observations
-            context = {}
             l = e_snt.shape[0]
             m = f_snt.shape[0]
-            pl = model.generate_rv(make_rv('L'), l, context, context)
-            pm = model.generate_rv(make_rv('M'), m, context, context)
+            pl = PL.generate(l)
+            pm = PM.generate(m)
 
-            # compute joint likelihood
-            pf_zae = np.ones((n_clusters, m, l), dtype=float)  # p(f|z,a,e)
-            log_pze = np.zeros(n_clusters, dtype=float)  # p(z,e) = p(z)p(e|z)
+            # Compute joint likelihood: P(z,a,f,e) = P(z,e)P(f,a|z,e)
+
+            # 1. P(z,e) = P(z)P(e|z) = P(z) \prod_i P(e_i|z)
+            log_pze = np.zeros(n_clusters, dtype=float)  # shape: (n_clusters,)
+            # 2. P(f,a|z,e) = \prod_j P(f_j,a_j|z,e)
+            pfa_ze = np.zeros((n_clusters, m, l), dtype=float)  # shape: (n_clusters, m, l)
             for z in range(n_clusters):
-                state = dict(context)
-                log_pz = np.log(model.generate_rv(make_rv('Z'), z, state, state))
-                log_pe = 0.0
+                # P(z)
+                log_pz = np.log(PZ.generate(z, l, m))
+                # P(e|z) = \prod_i P(e_i|z)
+                log_pe_z = 0.0
                 for i, e in enumerate(e_snt):
-                    log_pe += np.log(model.generate_rv(make_rv('Ei', i), e, state, state))
-                log_pze[z] = log_pz + log_pe
+                    log_pe_z += np.log(PEi.generate((i, e), z, l, m))
+                # P(z,e) = P(z)P(e|z)
+                log_pze[z] = log_pz + log_pe_z
+                # P(f,a|z,e) = \prod_j P(f_j,a_j|z,e)
                 for j, f in enumerate(f_snt):
                     for i, e in enumerate(e_snt):
-                        predictions = [(make_rv('Aj', j), i),
-                                       (make_rv('Fj', j), f)]
-                        pf_zae[z, j, i], _ = model.generate_rvs(predictions, state)
+                        # where P(f_j,a_j|z,e) = P(a_j|z,e)P(f_j|a_j,z,e)
+                        pfa_ze[z, j, i] = PAj.generate((j, i), e_snt, z, l, m) * PFj.generate((j, f), (j, i), e_snt, z, l, m)
 
-            # gather expected observations based on posterior
-            log_pfj_ez = np.log(pf_zae.sum(2))  # p(f_j|e,z) = \sum_i p(f_j,a_j=i|e,z)
-            # p(f|e,z) = \sum_a p(f,a|e, z) = \prod_j p(f_j|e,z)
-            log_pf_ez = log_pfj_ez.sum(1)  # prod_j p(f_j|e,z)
-            log_marginal = np.logaddexp.reduce(log_pze + log_pf_ez)  # p(f,e) = sum_z,a p(f,e,z,a)
-            post_z = np.exp(log_pze + log_pf_ez - log_marginal)
+            # Gather expected observations based on posterior
+            #
+            # 1. marginalise alignments
+            # p(f_j|z,e) = \sum_i p(f_j,a_j=i|z,e)
+            log_pfj_ze = np.log(pfa_ze.sum(2))  # shape: (n_clusters, m)
+            # p(f|z,e) = \sum_a p(f,a|z,e) = \sum_a \prod_j p(f_j, a_j|z,e)
+            #          = \prod_j \sum_i p(f_j,a_j=i|z,e)
+            #          = \prod_j p(f_j|z,e)
+            log_pf_ze = log_pfj_ze.sum(1)  # shape: (n_clusters,)
+            # P(z,f,e) = P(z,e) * P(f|z,e)
+            log_pzfe = log_pze + log_pf_ze  # shape: (n_clusters,)
+            # P(f,e) = \sum_z P(z,f,e)
+            log_pfe = np.logaddexp.reduce(log_pzfe)  # shape: scalar
+            # P(z|e,f) = P(z,e,f)/P(e,f)
+            post_z = np.exp(log_pzfe - log_pfe)  # shape: (n_clusters,)
+
+            #print(pfa_ze)
+            #print(log_pfj_ze)
+            #print(np.log(pfa_ze) - log_pfj_ze[:,:,np.newaxis])
+            #print()
+
+            # P(a|z,f,e) = P(z,e)P(f,a|z,e)/P(z,f,e)
+            #            = P(z,e)P(f,a|z,e) / [ P(z,e)P(f|z,e) ]
+            #            = P(f,a|z,e) / P(f|z,e)
+            #            = \prod_j P(f_j,a_j|z,e) / P(f_j|z,e)
+            #            = \prod_j P(a_j|z,f,e)
+            # where
+            #   P(a_j|z,f,e) = P(f_j,a_j|z,e)/P(f_j|z,e)
+            post_a = np.exp(np.log(pfa_ze) - log_pfj_ze[:, :, np.newaxis])  # shape: (n_clusters, m, l)
             for z in range(n_clusters):
-                state = dict(context)
                 # gather expected count for z: p(z|f, e)
-                model.observe_rv(make_rv('Z'), z, state, state, post_z[z])
+                PZ.observe(z, l, m, post_z[z])
                 # gather expected counts for (z, e_i): p(z|f, e)
                 for i, e in enumerate(e_snt):
-                    model.observe_rv(make_rv('Ei', i), e, state, state, post_z[z])
+                    PEi.observe((i, e), z, l, m, post_z[z])
                 # gather expected counts for (f_j, e_j): p(a_j=i|f,e,z)
-                log_post_a = np.log(pf_zae[z]) - log_pfj_ez[z][:, np.newaxis]
-                print(log_post_a)
-                print()
                 for j, f in enumerate(f_snt):
                     for i, e in enumerate(e_snt):
-                        predictions = [(make_rv('Aj', j), i),
-                                       (make_rv('Fj', j), f)]
-                        model.observe_rvs(predictions, state, np.exp(log_post_a[j, i]))
+                        PAj.observe((j, i), e_snt, z, l, m, post_a[z, j, i])
+                        PFj.observe((j, f), (j, i), e_snt, z, l, m, post_a[z, j, i])
 
         # M-step
-        model.update()
+        for comp in components:
+            comp.update()
 
-        logging.info('Iteration %d Likelihood %f', iteration, marginal_likelihood(e_corpus, f_corpus, model, n_clusters))
-
-
-def get_ibm1(e_corpus: Corpus, f_corpus: Corpus):
-    components = [cat.UniformAlignment(),
-                  cat.BrownLexical(e_corpus.vocab_size(),
-                               f_corpus.vocab_size())]
-    return DirectedModel(components)
-
-
-def get_ibm2(e_corpus: Corpus, f_corpus: Corpus, ibm1: DirectedModel=None):
-    if ibm1 is None:
-        components = [cat.VogelJump(e_corpus.max_len()),
-                      cat.BrownLexical(e_corpus.vocab_size(),
-                                   f_corpus.vocab_size())]
-        return DirectedModel(components)
-    else:
-        components = list(ibm1)
-        components[0] = cat.VogelJump(e_corpus.max_len())  # replace the alignment component
-        return DirectedModel(components)
-
-
-def get_joint_ibm1(e_corpus: Corpus, f_corpus: Corpus,
-                   n_clusters: int = 1, alpha: float = 1.0):
-    components = [cat.UniformLength(e_corpus.max_len(), 'L'),
-                  cat.UniformLength(f_corpus.max_len(), 'M'),
-                  cat.UniformAlignment(),
-                  cat.BrownLexical(e_corpus.vocab_size(),
-                               f_corpus.vocab_size()),
-                  cat.UnigramMixture(n_clusters,
-                                 e_corpus.vocab_size(),
-                                 alpha=alpha)]
-    return DirectedModel(components)
-
-
-def get_joint_zibm1(e_corpus: Corpus, f_corpus: Corpus,
-                    n_clusters: int = 1, alpha: float = 1.0):
-    components = [cat.UniformLength(e_corpus.max_len(), 'L'),  # P(L=l) = 1/e_max_len
-                  cat.UniformLength(f_corpus.max_len(), 'M'),  # P(M=m) = 1/f_max_len
-                  cat.UniformAlignment(),
-                  cat.MixtureOfBrownLex(n_clusters,
-                                        e_corpus.vocab_size(),
-                                        f_corpus.vocab_size()),
-                  cat.UnigramMixture(n_clusters,
-                                 e_corpus.vocab_size(),
-                                 alpha=alpha)]
-    return DirectedModel(components)
+        logging.info('Iteration %d Likelihood %f', iteration, marginal_likelihood(e_corpus, f_corpus,
+                                                                          PL, PM, PZ, PEi, PAj, PFj,
+                                                                          n_clusters))
 
 
 def main(e_path, f_path):
@@ -222,9 +222,21 @@ def main(e_path, f_path):
     f_corpus = Corpus(open(f_path))
 
     n_clusters = 1
-    model = get_ibm1(e_corpus, f_corpus)
-    #model = get_joint_ibm1(e_corpus, f_corpus, n_clusters)
-    zero_order_joint_model(e_corpus, f_corpus, model, iterations=10, n_clusters=n_clusters)
+    PL = cat.LengthDistribution()
+    #PL = cat.UniformLength(e_corpus.max_len())
+    PM = cat.LengthDistribution()
+    #PM = cat.UniformLength(f_corpus.max_len())
+    PZ = cat.ClusterDistribution()
+    #PZ = cat.ClusterUnigrams(n_clusters)
+    PEi = cat.TargetDistribution()
+    #PEi = cat.UnigramMixture(n_clusters, e_corpus.vocab_size(), alpha=1.0)
+    PAj = cat.UniformAlignment()
+    #PAj = cat.VogelJump(e_corpus.max_len())
+    PFj = cat.MixtureOfBrownLexical(n_clusters, e_corpus.vocab_size(), f_corpus.vocab_size())
+
+    zero_order_joint_model(e_corpus, f_corpus,
+                           PL, PM, PZ, PEi, PAj, PFj,
+                           iterations=10, n_clusters=n_clusters)
 
     # TODO: BrownLexicalPOE
 
