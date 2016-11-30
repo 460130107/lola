@@ -8,9 +8,9 @@ import numpy as np
 from numpy import array as nparray
 from lola.util import re_key_value
 from lola.corpus import Corpus
-from lola.hmm0.event import LexEventSpace
-from lola.hmm0.component import GenerativeComponent
-from lola.hmm0.component import cmp_prob
+from lola.conditional.event import LexEventSpace
+from lola.conditional.component import GenerativeComponent
+from lola.conditional.component import cmp_prob
 from lola.nnet import MLP
 from lola.nnet import MLPBuilder
 from lola.nnet import gradient_updates_momentum

@@ -9,9 +9,9 @@ from lola.io import print_lola_format
 from lola.io import print_moses_format
 from lola.io import print_naacl_format
 from lola.io import read_corpora
-from lola.hmm0.model import GenerativeModel
-from lola.hmm0.config import configure
-import lola.hmm0.em as em
+from lola.conditional.model import GenerativeModel
+from lola.conditional.config import configure
+import lola.conditional.em as em
 
 
 def argparser():

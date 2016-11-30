@@ -25,7 +25,7 @@ cimport numpy as np
 cimport libc.math as c_math
 import numpy as np
 from lola.corpus cimport Corpus
-from lola.hmm0.model cimport GenerativeModel
+from lola.conditional.model cimport GenerativeModel
 from lola.ptypes cimport uint_t
 from lola.ptypes cimport real_t
 import lola.ptypes as ptypes

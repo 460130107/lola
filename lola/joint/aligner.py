@@ -4,13 +4,13 @@
 import numpy as np
 import logging
 from lola.corpus import Corpus
-import lola.cat as cat
+import lola.joint.cat as cat
 import lola.ptypes as ptypes
 import sys
 from functools import partial
 
 
-class Model:
+class JointModel:
     def __init__(self, PL: cat.LengthDistribution,
                  PM: cat.LengthDistribution,
                  PZ: cat.ClusterDistribution,
@@ -30,7 +30,7 @@ class Model:
             comp.update()
 
 
-def marginal_likelihood(e_corpus: Corpus, f_corpus: Corpus, model: Model):
+def marginal_likelihood(e_corpus: Corpus, f_corpus: Corpus, model: JointModel):
 
     PL, PM, PZ, PEi, PAj, PFj = model.components
     n_clusters = PZ.n_clusters
@@ -70,7 +70,7 @@ def marginal_likelihood(e_corpus: Corpus, f_corpus: Corpus, model: Model):
     return - ll / e_corpus.n_sentences()
 
 
-def log_posterior(e_snt: 'np.array', f_snt: 'np.array', model: Model):
+def log_posterior(e_snt: 'np.array', f_snt: 'np.array', model: JointModel):
     """
     Return the factorised (log) posterior over latent variables:
         P(z,a|f,e) = P(z|f,e) P(a|z,f,e)
@@ -144,13 +144,13 @@ def log_posterior(e_snt: 'np.array', f_snt: 'np.array', model: Model):
     return log_pz_fe, log_pa_zfe
 
 
-def posterior(e_snt: 'np.array', f_snt: 'np.array', model: Model):
+def posterior(e_snt: 'np.array', f_snt: 'np.array', model: JointModel):
     """Same as log_posterior but exponentiate, i.e. in probability domain"""
     logpz, logpa = log_posterior(e_snt, f_snt, model)
     return np.exp(logpz), np.exp(logpa)
 
 
-def EM(e_corpus: Corpus, f_corpus: Corpus, model: Model, iterations=5):
+def EM(e_corpus: Corpus, f_corpus: Corpus, model: JointModel, iterations=5):
     """
     Generative story:
 
@@ -246,7 +246,7 @@ def EM(e_corpus: Corpus, f_corpus: Corpus, model: Model, iterations=5):
         logging.info('Iteration %d Likelihood %f', iteration, marginal_likelihood(e_corpus, f_corpus, model))
 
 
-def map_decoder(e_corpus: Corpus, f_corpus: Corpus, model: Model, callback):
+def map_decoder(e_corpus: Corpus, f_corpus: Corpus, model: JointModel, callback):
     """
 
     :param e_corpus: English data
@@ -290,7 +290,7 @@ def get_ibm1(e_corpus: Corpus, f_corpus: Corpus):
     PEi = cat.TargetDistribution()
     PAj = cat.UniformAlignment()
     PFj = cat.BrownLexical(e_corpus.vocab_size(), f_corpus.vocab_size())
-    return Model(PL, PM, PZ, PEi, PAj, PFj)
+    return JointModel(PL, PM, PZ, PEi, PAj, PFj)
 
 
 def get_joint_ibm1(e_corpus: Corpus, f_corpus: Corpus):
@@ -300,7 +300,7 @@ def get_joint_ibm1(e_corpus: Corpus, f_corpus: Corpus):
     PEi = cat.UnigramMixture(1, e_corpus.vocab_size())
     PAj = cat.UniformAlignment()
     PFj = cat.BrownLexical(e_corpus.vocab_size(), f_corpus.vocab_size())
-    return Model(PL, PM, PZ, PEi, PAj, PFj)
+    return JointModel(PL, PM, PZ, PEi, PAj, PFj)
 
 
 def get_joint_ibm1z(e_corpus: Corpus, f_corpus: Corpus, n_clusters=1, cluster_unigrams=True, alpha=1.0):
@@ -313,7 +313,7 @@ def get_joint_ibm1z(e_corpus: Corpus, f_corpus: Corpus, n_clusters=1, cluster_un
     PEi = cat.UnigramMixture(n_clusters, e_corpus.vocab_size(), alpha)
     PAj = cat.UniformAlignment()
     PFj = cat.MixtureOfBrownLexical(n_clusters, e_corpus.vocab_size(), f_corpus.vocab_size(), alpha)
-    return Model(PL, PM, PZ, PEi, PAj, PFj)
+    return JointModel(PL, PM, PZ, PEi, PAj, PFj)
 
 
 def print_map(s: int, z: int, a: 'np.array', pz: float, pa: 'np.array',

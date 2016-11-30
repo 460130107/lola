@@ -1,5 +1,5 @@
 cimport numpy as np
-from lola.hmm0.component cimport GenerativeComponent
+from lola.conditional.component cimport GenerativeComponent
 from lola.ptypes cimport uint_t
 from lola.ptypes cimport real_t
 

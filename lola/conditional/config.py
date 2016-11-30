@@ -4,11 +4,11 @@
 
 import lola.util as util
 from lola.corpus import Corpus
-from lola.hmm0.mlp import MLPComponent
-from lola.hmm0.model import GenerativeModel
-from lola.hmm0.component import BrownLexical
-from lola.hmm0.component import UniformAlignment
-from lola.hmm0.component import VogelJump
+from lola.conditional.mlp import MLPComponent
+from lola.conditional.model import GenerativeModel
+from lola.conditional.component import BrownLexical
+from lola.conditional.component import UniformAlignment
+from lola.conditional.component import VogelJump
 
 
 class ModelSpec:

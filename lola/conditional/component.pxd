@@ -1,5 +1,5 @@
 from lola.sparse cimport CPDTable
-from lola.hmm0.event cimport EventSpace
+from lola.conditional.event cimport EventSpace
 from lola.ptypes cimport uint_t
 from lola.ptypes cimport real_t
 

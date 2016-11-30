@@ -4,9 +4,9 @@ Generative components for alignment models.
 
 cimport cython
 from lola.corpus cimport Corpus
-from lola.hmm0.event cimport DummyEventSpace
-from lola.hmm0.event cimport LexEventSpace
-from lola.hmm0.event cimport JumpEventSpace
+from lola.conditional.event cimport DummyEventSpace
+from lola.conditional.event cimport LexEventSpace
+from lola.conditional.event cimport JumpEventSpace
 
 
 
