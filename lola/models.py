@@ -60,7 +60,7 @@ def zero_order_joint_model(e_corpus: Corpus, f_corpus: Corpus,
                            PEi: cat.TargetDistribution,
                            PAj: cat.AlignmentDistribution,
                            PFj: cat.SourceDistribution,
-                           iterations=5, n_clusters=1):
+                           iterations=5):
     """
     Generative story:
 
@@ -120,17 +120,19 @@ def zero_order_joint_model(e_corpus: Corpus, f_corpus: Corpus,
             * all of the above using MLP or LR instead of categorical distributions
         we can also have P(a_j|l,m)P(f_j|e_{a_j}, z) modelled by a single LR (with MLP-induced features).
 
-
-    :param e_corpus:
-    :param f_corpus:
-    :param model:
-    :param iterations:
-    :param n_clusters:
-    :return:
+    :param e_corpus: English data
+    :param f_corpus: French data
+    :param PL: English length distribution
+    :param PM: French length distribution
+    :param PZ: cluster distribution
+    :param PEi: English word distribution
+    :param PAj: alignment distribution
+    :param PFj: French word distribution
+    :param iterations: EM iterations
     """
 
+    n_clusters = PZ.n_clusters
     components = [PL, PM, PZ, PEi, PAj, PFj]
-
 
     logging.info('Iteration %d Likelihood %f', 0, marginal_likelihood(e_corpus, f_corpus,
                                                                       PL, PM, PZ, PEi, PAj, PFj,
@@ -182,11 +184,6 @@ def zero_order_joint_model(e_corpus: Corpus, f_corpus: Corpus,
             # P(z|e,f) = P(z,e,f)/P(e,f)
             post_z = np.exp(log_pzfe - log_pfe)  # shape: (n_clusters,)
 
-            #print(pfa_ze)
-            #print(log_pfj_ze)
-            #print(np.log(pfa_ze) - log_pfj_ze[:,:,np.newaxis])
-            #print()
-
             # P(a|z,f,e) = P(z,e)P(f,a|z,e)/P(z,f,e)
             #            = P(z,e)P(f,a|z,e) / [ P(z,e)P(f|z,e) ]
             #            = P(f,a|z,e) / P(f|z,e)
@@ -216,29 +213,50 @@ def zero_order_joint_model(e_corpus: Corpus, f_corpus: Corpus,
                                                                           n_clusters))
 
 
+def get_ibm1(e_corpus: Corpus, f_corpus: Corpus):
+    PL = cat.LengthDistribution()
+    PM = cat.LengthDistribution()
+    PZ = cat.ClusterDistribution(1)
+    PEi = cat.TargetDistribution()
+    PAj = cat.UniformAlignment()
+    PFj = cat.BrownLexical(e_corpus.vocab_size(), f_corpus.vocab_size())
+    return PL, PM, PZ, PEi, PAj, PFj
+
+
+def get_joint_ibm1(e_corpus: Corpus, f_corpus: Corpus):
+    PL = cat.LengthDistribution()
+    PM = cat.LengthDistribution()
+    PZ = cat.ClusterDistribution(1)
+    PEi = cat.UnigramMixture(1, e_corpus.vocab_size())
+    PAj = cat.UniformAlignment()
+    PFj = cat.BrownLexical(e_corpus.vocab_size(), f_corpus.vocab_size())
+    return PL, PM, PZ, PEi, PAj, PFj
+
+
+def get_joint_ibm1z(e_corpus: Corpus, f_corpus: Corpus, n_clusters=1, cluster_unigrams=False, alpha=1.0):
+    PL = cat.LengthDistribution()
+    PM = cat.LengthDistribution()
+    if not cluster_unigrams:
+        PZ = cat.ClusterDistribution(n_clusters)
+    else:
+        PZ = cat.ClusterUnigrams(n_clusters)
+    PEi = cat.UnigramMixture(n_clusters, e_corpus.vocab_size(), alpha)
+    PAj = cat.UniformAlignment()
+    PFj = cat.MixtureOfBrownLexical(n_clusters, e_corpus.vocab_size(), f_corpus.vocab_size(), alpha)
+    return PL, PM, PZ, PEi, PAj, PFj
+
+
 def main(e_path, f_path):
 
     e_corpus = Corpus(open(e_path), null='<null>')
     f_corpus = Corpus(open(f_path))
 
-    n_clusters = 1
-    PL = cat.LengthDistribution()
-    #PL = cat.UniformLength(e_corpus.max_len())
-    PM = cat.LengthDistribution()
-    #PM = cat.UniformLength(f_corpus.max_len())
-    PZ = cat.ClusterDistribution()
-    #PZ = cat.ClusterUnigrams(n_clusters)
-    PEi = cat.TargetDistribution()
-    #PEi = cat.UnigramMixture(n_clusters, e_corpus.vocab_size(), alpha=1.0)
-    PAj = cat.UniformAlignment()
-    #PAj = cat.VogelJump(e_corpus.max_len())
-    PFj = cat.MixtureOfBrownLexical(n_clusters, e_corpus.vocab_size(), f_corpus.vocab_size())
+    PL, PM, PZ, PEi, PAj, PFj = get_ibm1(e_corpus, f_corpus)
 
     zero_order_joint_model(e_corpus, f_corpus,
                            PL, PM, PZ, PEi, PAj, PFj,
-                           iterations=10, n_clusters=n_clusters)
+                           iterations=10)
 
-    # TODO: BrownLexicalPOE
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s', datefmt='%H:%M:%S')

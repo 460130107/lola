@@ -28,6 +28,8 @@ cdef class AlignmentDistribution:
 
 cdef class ClusterDistribution:
 
+    cdef readonly size_t n_clusters
+
     cpdef real_t generate(self, size_t z, size_t l, size_t m)
 
     cpdef observe(self, size_t z, size_t l, size_t m, real_t posterior)

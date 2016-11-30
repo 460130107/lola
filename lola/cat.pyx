@@ -55,6 +55,9 @@ cdef class AlignmentDistribution:
 
 cdef class ClusterDistribution:
 
+    def __init__(self, size_t n_clusters):
+        self.n_clusters = n_clusters
+
     cpdef real_t generate(self, size_t z, size_t l, size_t m):
         """
 
@@ -218,14 +221,14 @@ cdef class VogelJump(AlignmentDistribution):
 
 cdef class ClusterUnigrams(ClusterDistribution):
 
-    def __init__(self, size_t support_size,
+    def __init__(self, size_t n_clusters,
                  float alpha=0.0, rng=np.random.RandomState(1234)):
-        super(ClusterUnigrams, self).__init__()
+        super(ClusterUnigrams, self).__init__(n_clusters)
         if alpha > 0.0:  # sample CPDs from a symmetric Dirichlet(alpha)
-            self._cpd = rng.dirichlet(np.full(support_size, alpha), 1)
+            self._cpd = rng.dirichlet(np.full(n_clusters, alpha), 1)
         else:
-            self._cpd = np.full(support_size, 1.0 / support_size, dtype=ptypes.real)
-        self._counts = np.zeros(support_size, dtype=ptypes.real)
+            self._cpd = np.full(n_clusters, 1.0 / n_clusters, dtype=ptypes.real)
+        self._counts = np.zeros(n_clusters, dtype=ptypes.real)
 
     cpdef real_t generate(self, size_t z, size_t l, size_t m):
         return self._cpd[z]
