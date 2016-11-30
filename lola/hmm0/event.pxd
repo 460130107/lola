@@ -6,13 +6,14 @@ An event space is responsible for expressing an event in terms of a (possibly em
 
 cimport numpy as np
 from lola.corpus cimport Corpus
+from lola.ptypes cimport uint_t
 
 
 cdef class EventSpace:
 
     cdef readonly tuple shape
 
-    cpdef tuple get(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j)
+    cpdef tuple get(self, uint_t[::1] e_snt, uint_t[::1] f_snt, size_t i, size_t j)
 
     cpdef tuple readable(self, tuple event)
 
@@ -30,5 +31,5 @@ cdef class LexEventSpace(EventSpace):
 
 cdef class JumpEventSpace(EventSpace):
 
-    cdef int _longest
+    cdef size_t _longest
 

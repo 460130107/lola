@@ -13,6 +13,8 @@ cimport numpy as np
 import numpy as np
 cimport cython
 from collections import Counter
+from lola.ptypes cimport uint_t
+import lola.ptypes as ptypes
 
 
 cdef tuple tokenize(istream, bos=None):
@@ -35,7 +37,7 @@ cdef tuple tokenize(istream, bos=None):
         for line in istream:
             tokens.extend(line.split())
             boundaries.append(len(tokens))
-    return np.array(tokens, dtype='U'), np.array(boundaries, dtype=np.int)
+    return np.array(tokens, dtype='U'), np.array(boundaries, dtype=ptypes.uint)
 
 
 cdef tuple tokenize_and_prune(istream, bos=None,
@@ -72,7 +74,7 @@ cdef tuple tokenize_and_prune(istream, bos=None,
                 elif 1 <= max_count < counter[token]:
                     tokens[i] = max_tag
 
-    return np.array(tokens, dtype='U'), np.array(boundaries, dtype=np.int)
+    return np.array(tokens, dtype='U'), np.array(boundaries, dtype=ptypes.uint)
 
 
 
@@ -86,7 +88,7 @@ cdef class Corpus:
     Remark: This object offers no guarantee as to which exact index any word will get. Not even the NULL word.
     """
 
-    def __init__(self, istream, null=None, min_count=0, max_count=0):
+    def __init__(self, istream, null=None, size_t min_count=0, size_t max_count=0):
         """
         Creates a corpus from a text file.
         The corpus is internally represented by a flat numpy array.
@@ -110,7 +112,8 @@ cdef class Corpus:
         # use numpy to map tokens to integers
         # lookup converts from integers back to strings
         # inverse represents the corpus with words represented by integers
-        self._lookup, self._inverse = np.unique(tokens, return_inverse=True)
+        self._lookup, inverse = np.unique(tokens, return_inverse=True)
+        self._inverse = np.array(inverse, dtype=ptypes.uint)
 
         cdef int a = 0
         cdef int max_len = 0
@@ -119,20 +122,20 @@ cdef class Corpus:
             if b - a > max_len:
                 max_len = b - a
             a = b
-        self._max_len = max_len
+        self._max_len = <size_t>max_len
 
-    cpdef int max_len(self):
+    cpdef size_t max_len(self):
         """Returns the length of the longest sentence in the corpus."""
         return self._max_len
 
-    cpdef np.int_t[::1] sentence(self, size_t i):
+    cpdef uint_t[::1] sentence(self, size_t i):
         """
         Return the ith sentence. This is not checked for out-of-bound conditions.
         :param i: 0-based sentence id
         :return: memory view corresponding to the sentence
         """
-        cdef int a = 0 if i == 0 else self._boundaries[i - 1]
-        cdef int b = self._boundaries[i]
+        cdef uint_t a = 0 if i == 0 else self._boundaries[i - 1]
+        cdef uint_t b = self._boundaries[i]
         return self._inverse[a:b]
 
     def itersentences(self):
@@ -157,11 +160,11 @@ cdef class Corpus:
 
     cpdef size_t corpus_size(self):
         """Number of tokens in the corpus."""
-        return len(self._inverse)
+        return self._inverse.shape[0]
 
     cpdef size_t n_sentences(self):
         """Number of sentences in the corpus."""
-        return len(self._boundaries)
+        return self._boundaries.shape[0]
 
     cpdef Corpus underlying(self):
         """Returns itself"""
@@ -193,11 +196,11 @@ cdef class CorpusView(Corpus):
         self._offset = offset
         self._size = size
 
-    cpdef int max_len(self):
+    cpdef size_t max_len(self):
         """Returns the length of the longest sentence in the corpus."""
         return self._corpus.max_len()
 
-    cpdef np.int_t[::1] sentence(self, size_t i):
+    cpdef uint_t[::1] sentence(self, size_t i):
         """
         Return the ith sentence. This is not checked for out-of-bound conditions.
         :param i: 0-based sentence id
@@ -234,6 +237,4 @@ cdef class CorpusView(Corpus):
     cpdef Corpus underlying(self):
         """Returns the underlying Corpus object"""
         return self._corpus
-
-
 

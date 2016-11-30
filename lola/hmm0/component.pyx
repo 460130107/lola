@@ -2,9 +2,7 @@
 Generative components for alignment models.
 """
 
-cimport numpy as np
 cimport cython
-import numpy as np
 from lola.corpus cimport Corpus
 from lola.hmm0.event cimport DummyEventSpace
 from lola.hmm0.event cimport LexEventSpace
@@ -18,11 +16,11 @@ cdef class GenerativeComponent:
         self.name = name
         self.event_space = event_space
 
-    cpdef float prob(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
+    cpdef real_t prob(self, uint_t[::1] e_snt, uint_t[::1] f_snt, size_t i, size_t j):
         """Get the component value associated with a decision a_j=i."""
         raise NotImplementedError()
 
-    cpdef observe(self,  np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
+    cpdef observe(self,  uint_t[::1] e_snt, uint_t[::1] f_snt, size_t i, size_t j, real_t p):
         """Adds to the component value associated with a decision a_j=i"""
         raise NotImplementedError()
 
@@ -43,13 +41,13 @@ cdef class UniformAlignment(GenerativeComponent):
         super(UniformAlignment, self).__init__(name, DummyEventSpace())
 
     @cython.cdivision(True)
-    cpdef float prob(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
+    cpdef real_t prob(self, uint_t[::1] e_snt, uint_t[::1] f_snt, size_t i, size_t j):
         """
         Parameter associated with a certain jump.
         """
         return 1.0 / e_snt.shape[0]
 
-    cpdef observe(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
+    cpdef observe(self, uint_t[::1] e_snt, uint_t[::1] f_snt, size_t i, size_t j, real_t p):
         pass
 
     cpdef update(self):
@@ -81,7 +79,7 @@ cdef class CategoricalComponent(GenerativeComponent):
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cpdef float prob(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
+    cpdef real_t prob(self, uint_t[::1] e_snt, uint_t[::1] f_snt, size_t i, size_t j):
         """Get the parameter value associated with cat(f|e)."""
         cdef size_t c, d
         c, d = self.event_space.get(e_snt, f_snt, i, j)
@@ -89,7 +87,7 @@ cdef class CategoricalComponent(GenerativeComponent):
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cpdef observe(self,  np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
+    cpdef observe(self,  uint_t[::1] e_snt, uint_t[::1] f_snt, size_t i, size_t j, real_t p):
         """Adds to the parameter value associated with cat(f|e)."""
         cdef size_t c, d
         c, d = self.event_space.get(e_snt, f_snt, i, j)

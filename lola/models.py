@@ -114,9 +114,10 @@ def zero_order_joint_model(e_corpus: Corpus, f_corpus: Corpus, model: DirectedMo
     logging.info('Iteration %d Likelihood %f', 0, marginal_likelihood(e_corpus, f_corpus, model, n_clusters))
 
     for iteration in range(1, iterations + 1):
+        print(iteration)
         # E-step
-        for e_snt, f_snt in zip(e_corpus.itersentences(), f_corpus.itersentences()):
-
+        for s, (e_snt, f_snt) in enumerate(zip(e_corpus.itersentences(), f_corpus.itersentences())):
+            print('s=%d' % s)
             # observations
             context = {}
             l = e_snt.shape[0]
@@ -155,6 +156,8 @@ def zero_order_joint_model(e_corpus: Corpus, f_corpus: Corpus, model: DirectedMo
                     model.observe_rv(make_rv('Ei', i), e, state, state, post_z[z])
                 # gather expected counts for (f_j, e_j): p(a_j=i|f,e,z)
                 log_post_a = np.log(pf_zae[z]) - log_pfj_ez[z][:, np.newaxis]
+                print(log_post_a)
+                print()
                 for j, f in enumerate(f_snt):
                     for i, e in enumerate(e_snt):
                         predictions = [(make_rv('Aj', j), i),
@@ -219,8 +222,8 @@ def main(e_path, f_path):
     f_corpus = Corpus(open(f_path))
 
     n_clusters = 1
-    #model = get_ibm1(e_corpus, f_corpus)
-    model = get_joint_ibm1(e_corpus, f_corpus, n_clusters)
+    model = get_ibm1(e_corpus, f_corpus)
+    #model = get_joint_ibm1(e_corpus, f_corpus, n_clusters)
     zero_order_joint_model(e_corpus, f_corpus, model, iterations=10, n_clusters=n_clusters)
 
     # TODO: BrownLexicalPOE

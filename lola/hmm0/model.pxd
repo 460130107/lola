@@ -1,5 +1,7 @@
 cimport numpy as np
 from lola.hmm0.component cimport GenerativeComponent
+from lola.ptypes cimport uint_t
+from lola.ptypes cimport real_t
 
 
 cdef class GenerativeModel:
@@ -10,9 +12,9 @@ cdef class GenerativeModel:
 
     cpdef GenerativeComponent component(self, size_t n)
 
-    cpdef float likelihood(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j)
+    cpdef real_t likelihood(self, uint_t[::1] e_snt, uint_t[::1] f_snt, size_t i, size_t j)
 
-    cpdef observe(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p)
+    cpdef observe(self, uint_t[::1] e_snt, uint_t[::1] f_snt, size_t i, size_t j, real_t p)
 
     cpdef update(self)
 

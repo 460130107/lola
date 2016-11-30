@@ -18,7 +18,7 @@ cdef class SparseCategorical:
     This implementation does not check for out-of-bound keys.
     """
 
-    def __init__(self, int support_size, float base_value=0.0):
+    def __init__(self, size_t support_size, float base_value=0.0):
         """
         :param support_size: used in determining the sum of elements.
         :param base_value: value of unmapped elements in the support.
@@ -38,7 +38,7 @@ cdef class SparseCategorical:
         """How many elements have been mapped."""
         return self._data.size()
 
-    cpdef float get(self, int key):
+    cpdef float get(self, size_t key):
         """
         Return the value associated with a key (this operation never changes the container).
         It is a logical error to get a value for a key which is not supposed to belong to the support.
@@ -47,7 +47,7 @@ cdef class SparseCategorical:
         :param key: an element in the half-open [0, support_size)
         :return: categorical(key)
         """
-        cdef cppmap[int, float].iterator it = self._data.find(key)
+        cdef cppmap[size_t, float].iterator it = self._data.find(key)
         if it == self._data.end():
             return self._base_value
         else:
@@ -58,7 +58,7 @@ cdef class SparseCategorical:
         Scales all mapped elements as well as the base value.
         :param scalar: a real number (typically strictly positive)
         """
-        cdef cppmap[int, float].iterator it = self._data.begin()
+        cdef cppmap[size_t, float].iterator it = self._data.begin()
         while it != self._data.end():
             deref(it).second = deref(it).second * scalar
             inc(it)
@@ -70,20 +70,20 @@ cdef class SparseCategorical:
         :return: total mass
         """
         cdef float total = 0.0
-        cdef cppmap[int, float].iterator it = self._data.begin()
+        cdef cppmap[size_t, float].iterator it = self._data.begin()
         while it != self._data.end():
             total += deref(it).second
             inc(it)
         return total + (self._support_size - self._data.size()) * self._base_value
 
-    cpdef float plus_equals(self, int key, float value):
+    cpdef float plus_equals(self, size_t key, float value):
         """
         Adds to the underlying value of an element.
         :param key: an element in the half-open [0, support_size)
         :param value:
         :return: categorical(key)
         """
-        cdef cpppair[cppmap[int, float].iterator, bint] result = self._data.insert(cpppair[int, float](key, self._base_value + value))
+        cdef cpppair[cppmap[size_t, float].iterator, bint] result = self._data.insert(cpppair[size_t, float](key, self._base_value + value))
         if not result.second:
             deref(result.first).second = deref(result.first).second + value
         return deref(result.first).second
@@ -110,7 +110,7 @@ cdef class SparseCategorical:
 
     cpdef make_dense(self):
         cpd = np.zeros(self._support_size, dtype=float)
-        cdef cppmap[int, float].iterator it = self._data.begin()
+        cdef cppmap[size_t, float].iterator it = self._data.begin()
         while it != self._data.end():
             cpd[deref(it).first] = deref(it).second
             inc(it)
@@ -140,12 +140,12 @@ cdef class CPDTable:
     def shape(self):
         return self._cpds.size(), self._support_size
 
-    cpdef float get(self, size_t x, int y):
+    cpdef float get(self, size_t x, size_t y):
         """
         Parameter associated with the yth element of the xth CPD.
         """
-        cdef cppvector[cppmap[int, float]].iterator cpd_it = self._cpds.begin() + x
-        cdef cppmap[int, float].iterator it = deref(cpd_it).find(y)
+        cdef cppvector[cppmap[size_t, float]].iterator cpd_it = self._cpds.begin() + x
+        cdef cppmap[size_t, float].iterator it = deref(cpd_it).find(y)
         if it == deref(cpd_it).end():
             return self._base_values[x]
         else:
@@ -155,8 +155,8 @@ cdef class CPDTable:
         """
         Scale the xth CPD.
         """
-        cdef cppvector[cppmap[int, float]].iterator cpd_it = self._cpds.begin() + x
-        cdef cppmap[int, float].iterator it = deref(cpd_it).begin()
+        cdef cppvector[cppmap[size_t, float]].iterator cpd_it = self._cpds.begin() + x
+        cdef cppmap[size_t, float].iterator it = deref(cpd_it).begin()
         while it != deref(cpd_it).end():
             deref(it).second = deref(it).second * scalar
             inc(it)
@@ -166,20 +166,20 @@ cdef class CPDTable:
         """
         Return the sum of values (for mapped and unmapped elements) of the xth CPD.
         """
-        cdef cppvector[cppmap[int, float]].iterator cpd_it = self._cpds.begin() + x
+        cdef cppvector[cppmap[size_t, float]].iterator cpd_it = self._cpds.begin() + x
         cdef float total = 0.0
-        cdef cppmap[int, float].iterator it = deref(cpd_it).begin()
+        cdef cppmap[size_t, float].iterator it = deref(cpd_it).begin()
         while it != deref(cpd_it).end():
             total += deref(it).second
             inc(it)
         return total + (self._support_size - deref(cpd_it).size()) * self._base_values[x]
 
-    cpdef float plus_equals(self, size_t x, int y, float value):
+    cpdef float plus_equals(self, size_t x, size_t y, float value):
         """
         Adds to the underlying value of the yth element of the xth CPD.
         """
-        cdef cppvector[cppmap[int, float]].iterator cpd_it = self._cpds.begin() + x
-        cdef cpppair[cppmap[int, float].iterator, bint] result = deref(cpd_it).insert(cpppair[int, float](y, self._base_values[x] + value))
+        cdef cppvector[cppmap[size_t, float]].iterator cpd_it = self._cpds.begin() + x
+        cdef cpppair[cppmap[size_t, float].iterator, bint] result = deref(cpd_it).insert(cpppair[size_t, float](y, self._base_values[x] + value))
         if not result.second:
             deref(result.first).second = deref(result.first).second + value
         return deref(result.first).second
@@ -198,13 +198,13 @@ cdef class CPDTable:
                 self.scale(x, 1.0 / Z)
 
     def iternonzero(self, size_t x):
-        cdef cppvector[cppmap[int, float]].iterator cpd_it = self._cpds.begin() + x
+        cdef cppvector[cppmap[size_t, float]].iterator cpd_it = self._cpds.begin() + x
         return dict(deref(cpd_it)).items()
 
     cpdef make_dense(self):
         cpd = np.zeros(self.shape, dtype=float)
-        cdef cppvector[cppmap[int, float]].iterator cpd_it = self._cpds.begin()
-        cdef cppmap[int, float].iterator it
+        cdef cppvector[cppmap[size_t, float]].iterator cpd_it = self._cpds.begin()
+        cdef cppmap[size_t, float].iterator it
         cdef size_t row = 0
         while cpd_it != self._cpds.end():
             it = deref(cpd_it).begin()

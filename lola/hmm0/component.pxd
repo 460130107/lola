@@ -1,6 +1,7 @@
-cimport numpy as np
 from lola.sparse cimport CPDTable
 from lola.hmm0.event cimport EventSpace
+from lola.ptypes cimport uint_t
+from lola.ptypes cimport real_t
 
 
 cpdef float cmp_prob(tuple pair)
@@ -12,9 +13,9 @@ cdef class GenerativeComponent:
 
     cdef readonly EventSpace event_space
 
-    cpdef float prob(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j)
+    cpdef real_t prob(self, uint_t[::1] e_snt, uint_t[::1] f_snt, size_t i, size_t j)
 
-    cpdef observe(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p)
+    cpdef observe(self, uint_t[::1] e_snt, uint_t[::1] f_snt, size_t i, size_t j, real_t p)
 
     cpdef update(self)
 

@@ -1,4 +1,5 @@
 cimport numpy as np
+from lola.ptypes cimport uint_t
 
 
 cdef class Corpus:
@@ -12,13 +13,13 @@ cdef class Corpus:
     """
 
     cdef readonly object _lookup
-    cdef readonly np.int_t[::1] _inverse
-    cdef readonly np.int_t[::1] _boundaries
-    cdef int _max_len
+    cdef readonly uint_t[::1] _inverse
+    cdef readonly uint_t[::1] _boundaries
+    cdef size_t _max_len
 
-    cpdef int max_len(self)
+    cpdef size_t max_len(self)
 
-    cpdef np.int_t[::1] sentence(self, size_t i)
+    cpdef uint_t[::1] sentence(self, size_t i)
 
     cpdef translate(self, size_t i)
 

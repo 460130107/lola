@@ -20,7 +20,7 @@ cdef class GenerativeModel:
     cpdef GenerativeComponent component(self, size_t n):
         return self._components[n]
 
-    cpdef float likelihood(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j):
+    cpdef real_t likelihood(self, uint_t[::1] e_snt, uint_t[::1] f_snt, size_t i, size_t j):
         """
         Evaluate p(a_j = i , f | e).
 
@@ -31,12 +31,12 @@ cdef class GenerativeModel:
         :return: p(a_j = i, f | e)
         """
         cdef GenerativeComponent comp
-        cdef float l = 1.0
+        cdef real_t l = 1.0
         for comp in self._components:
             l *= comp.prob(e_snt, f_snt, i, j)
         return l
 
-    cpdef observe(self, np.int_t[::1] e_snt, np.int_t[::1] f_snt, int i, int j, float p):
+    cpdef observe(self, uint_t[::1] e_snt, uint_t[::1] f_snt, size_t i, size_t j, real_t p):
         """
         Evaluate p(a_j = i , f | e).
 

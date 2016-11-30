@@ -26,8 +26,12 @@ cimport libc.math as c_math
 import numpy as np
 from lola.corpus cimport Corpus
 from lola.hmm0.model cimport GenerativeModel
+from lola.ptypes cimport uint_t
+from lola.ptypes cimport real_t
+import lola.ptypes as ptypes
 
-cpdef float viterbi_alignments(Corpus e_corpus, Corpus f_corpus, GenerativeModel model, callback):
+
+cpdef real_t viterbi_alignments(Corpus e_corpus, Corpus f_corpus, GenerativeModel model, callback):
     """
     This writes Viterbi alignments to an output stream.
 
@@ -40,12 +44,12 @@ cpdef float viterbi_alignments(Corpus e_corpus, Corpus f_corpus, GenerativeModel
     cdef:
         size_t S = f_corpus.n_sentences()
         size_t s
-        np.int_t[::1] f_snt, e_snt
-        np.int_t[::1] alignment = np.zeros(f_corpus.max_len(), dtype=np.int)
-        np.float_t[::1] posterior = np.zeros(f_corpus.max_len(), dtype=np.float)
+        uint_t[::1] f_snt, e_snt
+        uint_t[::1] alignment = np.zeros(f_corpus.max_len(), dtype=ptypes.uint)
+        real_t[::1] posterior = np.zeros(f_corpus.max_len(), dtype=ptypes.real)
         size_t i, j, best_i
-        int f, e
-        float p, best_p
+        size_t f, e
+        real_t p, best_p
 
     for s in range(S):
         f_snt = f_corpus.sentence(s)
@@ -68,7 +72,7 @@ cpdef float viterbi_alignments(Corpus e_corpus, Corpus f_corpus, GenerativeModel
         callback(s, alignment[0:m], posterior[0:m])
 
 
-cpdef float loglikelihood(Corpus e_corpus, Corpus f_corpus, GenerativeModel model):
+cpdef real_t loglikelihood(Corpus e_corpus, Corpus f_corpus, GenerativeModel model):
     """
     Computes the log-likelihood of the data under IBM 1 for given parameters.
 
@@ -78,11 +82,11 @@ cpdef float loglikelihood(Corpus e_corpus, Corpus f_corpus, GenerativeModel mode
     :return: log of \prod_{f_1^m,e_0^l} \prod_{j=1}^m \sum_{i=0}^l lex(f_j|e_i)
     """
     cdef:
-        float loglikelihood = 0.0
+        real_t loglikelihood = 0.0
         size_t S = f_corpus.n_sentences()
-        np.int_t[::1] f_snt, e_snt
+        uint_t[::1] f_snt, e_snt
         size_t s, i, j
-        int e, f
+        size_t e, f
         float p
 
     for s in range(S):
@@ -97,7 +101,7 @@ cpdef float loglikelihood(Corpus e_corpus, Corpus f_corpus, GenerativeModel mode
     return loglikelihood
 
 
-cpdef float empirical_cross_entropy(Corpus e_corpus, Corpus f_corpus, GenerativeModel model, float log_zero=-99):
+cpdef real_t empirical_cross_entropy(Corpus e_corpus, Corpus f_corpus, GenerativeModel model, real_t log_zero=-99):
     """
     Computes H(p*, p) = - 1/N \sum_{s=1}^N p(f^s|e^s)
         where p is a model distribution
@@ -113,13 +117,13 @@ cpdef float empirical_cross_entropy(Corpus e_corpus, Corpus f_corpus, Generative
     :return: H(p*, p)
     """
     cdef:
-        float log_p_s
-        float entropy = 0.0
+        real_t log_p_s
+        real_t entropy = 0.0
         size_t S = f_corpus.n_sentences()
-        np.int_t[::1] f_snt, e_snt
+        uint_t[::1] f_snt, e_snt
         size_t s, i, j
-        int e, f
-        float p
+        size_t e, f
+        real_t p
 
     for s in range(S):
         e_snt = e_corpus.sentence(s)
@@ -138,7 +142,7 @@ cpdef float empirical_cross_entropy(Corpus e_corpus, Corpus f_corpus, Generative
     return - entropy / S
 
 
-cpdef EM(Corpus e_corpus, Corpus f_corpus, int iterations, GenerativeModel model):
+cpdef EM(Corpus e_corpus, Corpus f_corpus, size_t iterations, GenerativeModel model):
     """
     MLE estimates via EM for zeroth-order HMMs.
 
@@ -151,7 +155,7 @@ cpdef EM(Corpus e_corpus, Corpus f_corpus, int iterations, GenerativeModel model
     cdef size_t iteration
 
     logging.debug('[%d] Cross entropy', 0)
-    cdef float H = empirical_cross_entropy(e_corpus, f_corpus, model)
+    cdef real_t H = empirical_cross_entropy(e_corpus, f_corpus, model)
     logging.info('I=%d H=%f', 0, H)
     cdef list entropy_log = [H]
 
@@ -188,10 +192,10 @@ cdef e_step(Corpus e_corpus, Corpus f_corpus, GenerativeModel model):
     """
 
     cdef size_t S = f_corpus.n_sentences()
-    cdef np.int_t[::1] f_snt, e_snt
-    cdef np.float_t[::1] likelihood_aj = np.zeros(e_corpus.max_len())
+    cdef uint_t[::1] f_snt, e_snt
+    cdef real_t[::1] likelihood_aj = np.zeros(e_corpus.max_len(), dtype=ptypes.real)
     cdef size_t s, i, j
-    cdef int f, e
+    cdef size_t f, e
     cdef float marginal, p
 
     for s in range(S):
