@@ -6,13 +6,11 @@ import theano
 import theano.tensor as T
 import numpy as np
 from numpy import array as nparray
-from lola.util import re_key_value
 from lola.corpus import Corpus
 from lola.nnet import MLP
 from lola.nnet import MLPBuilder
 from lola.nnet import gradient_updates_momentum
-from lola.cat import SourceDistribution
-from lola.sparse import CPDTable
+from lola.joint.cat import SourceDistribution
 
 
 class MLPLexical(SourceDistribution):

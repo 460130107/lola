@@ -3,11 +3,11 @@
 """
 import sys
 from lola.corpus import Corpus
-import lola.cat as cat
-from lola.mlp import MLPLexical
+import lola.joint.cat as cat
+from lola.joint.mlp import MLPLexical
 import logging
 from functools import partial
-from lola.conditional import EM, ConditionalModel, map_decoder
+from lola.joint.conditional import EM, ConditionalModel, map_decoder
 from lola.io import print_lola_format
 
 
