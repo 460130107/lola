@@ -93,7 +93,7 @@ cdef class TargetDistribution:
         :param z: cluster
         :param l: English length
         :param m: French length
-        :return: P(e_i,z|l,m)
+        :return: P(e_i|z,l,m)
         """
         return 1.0
 
@@ -125,7 +125,7 @@ cdef class SourceDistribution:
         :param z: cluster
         :param l: English length
         :param m: French length
-        :return: P(f_j, a_j|z, e)
+        :return: P(f_j|a_j, z, e)
         """
         return 1.0
 

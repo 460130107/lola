@@ -233,7 +233,7 @@ def get_joint_ibm1(e_corpus: Corpus, f_corpus: Corpus):
     return PL, PM, PZ, PEi, PAj, PFj
 
 
-def get_joint_ibm1z(e_corpus: Corpus, f_corpus: Corpus, n_clusters=1, cluster_unigrams=False, alpha=1.0):
+def get_joint_ibm1z(e_corpus: Corpus, f_corpus: Corpus, n_clusters=1, cluster_unigrams=True, alpha=1.0):
     PL = cat.LengthDistribution()
     PM = cat.LengthDistribution()
     if not cluster_unigrams:
