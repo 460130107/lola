@@ -19,8 +19,9 @@ from itertools import product
 
 class LRComponent(GenerativeComponent):
     """
-    This MLP component functions as a Categorical distribution.
-    The input is an English word and the output is a distribution over the French vocabulary.
+    This turns the lexical distribution into a logistic regression.
+    Additionally, this logistic regression is powered by an neural network,
+    which means it can induce features from both lexical entries (English word and French word).
 
     """
 
@@ -76,12 +77,12 @@ class LRComponent(GenerativeComponent):
         for di, do in zip(hidden, hidden[1:]):
             builder.add_layer(di, do)
         # The Logistic Regression adds the final scoring layer and is responsible for normalisation over vF classes
-        self._mlp = LR(builder, vE, vF)  # type: MLP
+        self._nn = LR(builder, vE, vF)  # type: MLP
 
         # Create Theano variables for the MLP input
-        mlp_input = T.matrix('mlp_input')
+        nn_input = T.matrix('mlp_input')
         # ... and the expected output
-        mlp_expected = T.matrix('mlp_expected')
+        nn_expected = T.matrix('mlp_expected')
         learning_rate = T.scalar('learning_rate')
 
         # Learning rate and momentum hyperparameter values
@@ -91,20 +92,20 @@ class LRComponent(GenerativeComponent):
         momentum = 0
 
         # Create a theano function for computing the MLP's output given some input
-        self._mlp_output = theano.function([mlp_input], self._mlp.output(mlp_input))
+        self._nn_output = theano.function([nn_input], self._nn.output(nn_input))
         # Create a function for computing the cost of the network given an input
-        cost = - self._mlp.expected_logprob(mlp_input, mlp_expected)
+        cost = - self._nn.expected_logprob(nn_input, nn_expected)
         # Create a theano function for training the network
-        self._train = theano.function([mlp_input, mlp_expected, learning_rate],
+        self._train = theano.function([nn_input, nn_expected, learning_rate],
                                       # cost function
                                       cost,
                                       updates=gradient_updates_momentum(cost,
-                                                                        self._mlp.params,
+                                                                        self._nn.params,
                                                                         learning_rate,
                                                                         momentum))
 
         # table to store the CPDs (output of LR reshaped into a (vE, vF) matrix)
-        self._cpds = self._mlp_output(self._X).reshape(self.event_space.shape)
+        self._cpds = self._nn_output(self._X).reshape(self.event_space.shape)
         # table to gather expected counts
         self._counts = np.zeros(self.event_space.shape, dtype=theano.config.floatX)
         self._i = 0
@@ -184,7 +185,7 @@ class LRComponent(GenerativeComponent):
                 break
 
         # Finally, we update the CPDs and reset the sufficient statistics to zero
-        self._cpds = self._mlp_output(self._X).reshape(self.event_space.shape)
+        self._cpds = self._nn_output(self._X).reshape(self.event_space.shape)
         self._counts = np.zeros(self.event_space.shape, dtype=theano.config.floatX)
 
     def save(self, path):

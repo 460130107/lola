@@ -162,11 +162,13 @@ class MLP:
 
     def __init__(self, builder: NNBuilder, n_classes: int):
         """
-        Multi-layer perceptron class, computes the composition of a sequence of Layers
+        Multi-layer perceptron class, computes the composition of a sequence of Layers.
+        It effectively trains builder.n_input classifiers, each of which defined over n_classes.
 
         :parameters:
             - builder : NNBuilder
                 A builder object that contains the configured layers.
+                On top of these layers, MLP will add a softmax layer over n_classes (see below).
             - n_classes : number of output classes
         """
 
@@ -193,11 +195,11 @@ class MLP:
 
         :parameters:
             - x : theano.tensor.var.TensorVariable
-                Theano symbolic variable for network input
+                One row per classifier.
 
         :returns:
             - output : theano.tensor.var.TensorVariable
-                x passed through the MLP
+                One categorical distribution over n_classes per classifier.
         """
         for layer in self.layers:  # recursively transforms x
             x = layer.output(x)
@@ -206,48 +208,36 @@ class MLP:
     def expected_logprob(self, x: TensorVariable,
                          mu: TensorVariable) -> TensorVariable:
         """
-        Compute the squared euclidean error of the network output against the "true" output y
 
         :parameters:
             - x : theano.tensor.var.TensorVariable
-                Theano symbolic variable for network input
+                This should contain one row per classifier.
             - mu : theano.tensor.var.TensorVariable
-                Theano symbolic variable for expected level of output
+                For each row in x, this has expected levels over n_classes
 
         :returns:
-            - error : theano.tensor.var.TensorVariable
-                The squared Euclidian distance between the network output and y
+            - sum of expected log prob : theano.tensor.var.TensorVariable
         """
 
         return T.sum(T.mul(mu, T.log(self.output(x))))
-
-    def logprob(self, x: TensorVariable) -> TensorVariable:
-        """
-        Compute the squared euclidean error of the network output against the "true" output y
-
-        :parameters:
-            - x : theano.tensor.var.TensorVariable
-                Theano symbolic variable for network input
-            - mu : theano.tensor.var.TensorVariable
-                Theano symbolic variable for expected level of output
-
-        :returns:
-            - error : theano.tensor.var.TensorVariable
-                The squared Euclidian distance between the network output and y
-        """
-        return T.sum(T.log(self.output(x)))
 
 
 class LR:
 
     def __init__(self, builder: NNBuilder, n_contexts: int, n_decisions: int):
         """
-        Multi-layer perceptron class, computes the composition of a sequence of Layers
+        Logistic regression class.
+        Let c be a context and d be a decision, let f(c, d) \in R^n be a feature representation.
+        This class computes:
+            p(d|c) \propto exp(w.dot(f(c,d)))
+        where normalisation happens wrt the given context over a number of decisions (n_decisions).
 
         :parameters:
             - builder : NNBuilder
                 A builder object that contains the configured layers.
-            - n_contexts, n_decisions: together determines the shape of the CPDs implicitly represented
+                On top of these layers, LR will add a linear layer.
+            - n_contexts : number of CPDs
+            - n_decisions : size of the support of these CPDs
         """
 
         self.n_contexts = n_contexts
@@ -272,15 +262,15 @@ class LR:
 
     def output(self, x: TensorVariable) -> TensorVariable:
         """
-        Compute the MLP's output given an input
+        Compute the LR's output.
 
         :parameters:
             - x : theano.tensor.var.TensorVariable
-                Theano symbolic variable for network input
+                This should be a matrix with (n_contexts * n_decisions) rows.
 
         :returns:
             - output : theano.tensor.var.TensorVariable
-                x passed through the MLP
+                For each pair (c, d), the probability p(d|c) properly normalised.
         """
 
         for layer in self.layers:  # recursively transforms x
@@ -294,19 +284,16 @@ class LR:
     def expected_logprob(self, x: TensorVariable,
                          mu: TensorVariable) -> TensorVariable:
         """
-        Compute the squared euclidean error of the network output against the "true" output y
 
         :parameters:
             - x : theano.tensor.var.TensorVariable
-                Theano symbolic variable for network input
+                This should be a matrix with (n_contexts * n_decisions) rows.
             - mu : theano.tensor.var.TensorVariable
-                Theano symbolic variable for expected level of output
+                This should associated to each row in x an expected output level.
 
         :returns:
-            - error : theano.tensor.var.TensorVariable
-                The squared Euclidian distance between the network output and y
+            - sum of expected log prob : theano.tensor.var.TensorVariable
         """
-
         return T.sum(T.mul(mu, T.log(self.output(x))))
 
 
