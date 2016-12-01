@@ -12,7 +12,7 @@ from lola.conditional.event import LexEventSpace
 from lola.conditional.component import GenerativeComponent
 from lola.conditional.component import cmp_prob
 from lola.nnet import MLP
-from lola.nnet import MLPBuilder
+from lola.nnet import NNBuilder
 from lola.nnet import gradient_updates_momentum
 
 
@@ -62,15 +62,16 @@ class MLPComponent(GenerativeComponent):
         self._X = np.identity(self.n_input, dtype=theano.config.floatX)
 
         # Create MLP
-        builder = MLPBuilder(rng)
+        builder = NNBuilder(rng)
         # ... the embedding layer
         builder.add_layer(self.n_input, hidden[0])
         # ... additional hidden layers
         for di, do in zip(hidden, hidden[1:]):
             builder.add_layer(di, do)
         # ... and the output layer (a softmax layer)
-        builder.add_layer(hidden[-1], self.n_output, activation=T.nnet.softmax)
-        self._mlp = builder.build()  # type: MLP
+        #builder.add_layer(hidden[-1], self.n_output, activation=T.nnet.softmax)
+        # The MLP adds the softmax layer over n_classes
+        self._mlp = MLP(builder, n_classes=self.n_output)  # type: MLP
 
         # Create Theano variables for the MLP input
         mlp_input = T.matrix('mlp_input')

@@ -8,7 +8,7 @@ import numpy as np
 from numpy import array as nparray
 from lola.corpus import Corpus
 from lola.nnet import MLP
-from lola.nnet import MLPBuilder
+from lola.nnet import NNBuilder
 from lola.nnet import gradient_updates_momentum
 from lola.joint.cat import SourceDistribution
 
@@ -57,15 +57,14 @@ class MLPLexical(SourceDistribution):
         self._X = np.identity(self.n_input, dtype=theano.config.floatX)
 
         # Create MLP
-        builder = MLPBuilder(rng)
+        builder = NNBuilder(rng)
         # ... the embedding layer
         builder.add_layer(self.n_input, hidden[0])
         # ... additional hidden layers
         for di, do in zip(hidden, hidden[1:]):
             builder.add_layer(di, do)
-        # ... and the output layer (a softmax layer)
-        builder.add_layer(hidden[-1], self.n_output, activation=T.nnet.softmax)
-        self._mlp = builder.build()  # type: MLP
+        # The MLP adds a softmax layer over n_classes
+        self._mlp = MLP(builder, n_classes=f_corpus.vocab_size())  # type: MLP
 
         # Create Theano variables for the MLP input
         mlp_input = T.matrix('mlp_input')
@@ -84,6 +83,7 @@ class MLPLexical(SourceDistribution):
 
         # Create a function for computing the cost of the network given an input
         cost = - self._mlp.expected_logprob(mlp_input, mlp_expected)
+
         # Create a theano function for training the network
         self._train = theano.function([mlp_input, mlp_expected, learning_rate],
                                       # cost function

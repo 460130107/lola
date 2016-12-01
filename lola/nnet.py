@@ -104,7 +104,7 @@ class Layer:
         return lin_output if self.activation is None else self.activation(lin_output)
 
 
-class MLPBuilder:
+class NNBuilder:
 
     def __init__(self, rng):
         self._rng = rng
@@ -142,29 +142,42 @@ class MLPBuilder:
     def iterlayers(self) -> Iterable[Layer]:
         return iter(self._layers)
 
-    def build(self) -> 'MLP':
-        """Builds an MLP and resents the builder"""
-        if not self._layers:
-            raise ValueError('I cannot build an MLP without layers')
-        mlp = MLP(self)
+    def n_input(self):
+        """Input dimensionality"""
+        if self._layers:
+            return self._layers[0].n_input
+        raise ValueError('I have no layers')
+
+    def n_output(self):
+        """Current output dimensionality"""
+        if self._layers:
+            return self._layers[-1].n_output
+        raise ValueError('I have no layers')
+
+    def reset(self):
         self._layers = []
-        return mlp
 
 
 class MLP:
 
-    def __init__(self, builder: MLPBuilder):
+    def __init__(self, builder: NNBuilder, n_classes: int):
         """
         Multi-layer perceptron class, computes the composition of a sequence of Layers
 
         :parameters:
-            - builder : MLPBuilder
+            - builder : NNBuilder
                 A builder object that contains the configured layers.
+            - n_classes : number of output classes
         """
+
+        # final layers is a softmax over a number of classes
+        builder.add_layer(builder.n_output(), n_classes, activation=T.nnet.softmax)
+
         # Initialize lists of layers
         self.layers = []  # type: List[Layer]
         for layer in builder.iterlayers():
             self.layers.append(layer)
+        builder.reset()
 
         # Combine parameters from all layers
         self.params = []
@@ -190,40 +203,6 @@ class MLP:
             x = layer.output(x)
         return x
 
-    def squared_error(self, x: TensorVariable,
-                      y: TensorVariable) -> TensorVariable:
-        """
-        Compute the squared euclidean error of the network output against the "true" output y
-
-        :parameters:
-            - x : theano.tensor.var.TensorVariable
-                Theano symbolic variable for network input
-            - y : theano.tensor.var.TensorVariable
-                Theano symbolic variable for desired network output
-
-        :returns:
-            - error : theano.tensor.var.TensorVariable
-                The squared Euclidian distance between the network output and y
-        """
-        return T.sum((self.output(x) - y) ** 2)
-
-    def expected_logprob2(self, x: TensorVariable,
-                         mu: TensorVariable) -> TensorVariable:
-        """
-        Compute the squared euclidean error of the network output against the "true" output y
-
-        :parameters:
-            - x : theano.tensor.var.TensorVariable
-                Theano symbolic variable for network input
-            - mu : theano.tensor.var.TensorVariable
-                Theano symbolic variable for expected level of output
-
-        :returns:
-            - error : theano.tensor.var.TensorVariable
-                The squared Euclidian distance between the network output and y
-        """
-        return T.sum(T.mul(mu, T.log(self.output(x))), 1)
-
     def expected_logprob(self, x: TensorVariable,
                          mu: TensorVariable) -> TensorVariable:
         """
@@ -239,6 +218,7 @@ class MLP:
             - error : theano.tensor.var.TensorVariable
                 The squared Euclidian distance between the network output and y
         """
+
         return T.sum(T.mul(mu, T.log(self.output(x))))
 
     def logprob(self, x: TensorVariable) -> TensorVariable:
@@ -256,6 +236,78 @@ class MLP:
                 The squared Euclidian distance between the network output and y
         """
         return T.sum(T.log(self.output(x)))
+
+
+class LR:
+
+    def __init__(self, builder: NNBuilder, n_contexts: int, n_decisions: int):
+        """
+        Multi-layer perceptron class, computes the composition of a sequence of Layers
+
+        :parameters:
+            - builder : NNBuilder
+                A builder object that contains the configured layers.
+            - n_contexts, n_decisions: together determines the shape of the CPDs implicitly represented
+        """
+
+        self.n_contexts = n_contexts
+        self.n_decisions = n_decisions
+
+        # this is the scoring layer
+        builder.add_layer(builder.n_output(), 1, activation=None)
+
+        # Initialize lists of layers
+        self.layers = []  # type: List[Layer]
+        for layer in builder.iterlayers():
+            self.layers.append(layer)
+        builder.reset()
+
+        # Combine parameters from all layers
+        self.params = []
+        for layer in self.layers:
+            self.params += layer.params
+
+        self.n_input = self.layers[0].n_input
+        self.n_output = self.layers[-1].n_output
+
+    def output(self, x: TensorVariable) -> TensorVariable:
+        """
+        Compute the MLP's output given an input
+
+        :parameters:
+            - x : theano.tensor.var.TensorVariable
+                Theano symbolic variable for network input
+
+        :returns:
+            - output : theano.tensor.var.TensorVariable
+                x passed through the MLP
+        """
+
+        for layer in self.layers:  # recursively transforms x
+            x = layer.output(x)
+        original_shape = x.shape
+        # reshape potentials into a CPD style matrix
+        # compute a softmax per row
+        # reshape it back into a long matrix
+        return T.nnet.softmax(x.reshape((self.n_contexts, self.n_decisions))).reshape(original_shape)
+
+    def expected_logprob(self, x: TensorVariable,
+                         mu: TensorVariable) -> TensorVariable:
+        """
+        Compute the squared euclidean error of the network output against the "true" output y
+
+        :parameters:
+            - x : theano.tensor.var.TensorVariable
+                Theano symbolic variable for network input
+            - mu : theano.tensor.var.TensorVariable
+                Theano symbolic variable for expected level of output
+
+        :returns:
+            - error : theano.tensor.var.TensorVariable
+                The squared Euclidian distance between the network output and y
+        """
+
+        return T.sum(T.mul(mu, T.log(self.output(x))))
 
 
 def gradient_updates_momentum(cost, params, learning_rate, momentum):

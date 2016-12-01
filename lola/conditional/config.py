@@ -5,6 +5,7 @@
 import lola.util as util
 from lola.corpus import Corpus
 from lola.conditional.mlp import MLPComponent
+from lola.conditional.lr import LRComponent
 from lola.conditional.model import GenerativeModel
 from lola.conditional.component import BrownLexical
 from lola.conditional.component import UniformAlignment
@@ -131,6 +132,8 @@ def read_component(e_corpus: Corpus, f_corpus: Corpus, args, line: str, i: int, 
         state.add_component(name, VogelJump(e_corpus.max_len(), name=name))
     elif component_type == "LexMLP":
         state.add_component(name, MLPComponent.construct(e_corpus, f_corpus, name, cfg))
+    elif component_type == "LexLR":
+        state.add_component(name, LRComponent.construct(e_corpus, f_corpus, name, cfg))
     else:
         raise ValueError("I do not know this type of generative component: %s" % component_type)
 
